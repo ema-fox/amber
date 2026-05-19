@@ -28,9 +28,11 @@ enum Val {
 enum Inst {
     Lit(Val),
     Deref(String),
+    Bind(String, Box<Inst>),
     List(Vec<Inst>),
     Call(Box<Inst>, Box<Inst>),
-    If(Box<Inst>, Box<Inst>, Box<Inst>)
+    If(Box<Inst>, Box<Inst>, Box<Inst>),
+    Fn(String, Box<Inst>)
 }
 
 fn sym_char(inp: &str) -> IResult<&str, &str> {
@@ -53,6 +55,11 @@ fn pderef(inp: &str) -> IResult<&str, Inst> {
     map(psym, |v: &str| Inst::Deref(v.to_string())).parse(inp)
 }
 
+fn pbind(inp: &str) -> IResult<&str, Inst> {
+    map((psym, (char(':'), multispace0), pinst),
+        |(name, _, body)| Inst::Bind(name.to_string(), Box::new(body))).parse(inp)
+}
+
 fn pbraceinst(inp: &str) -> IResult<&str, Inst> {
     map(delimited(char('{'), (psym, pinsts), char('}')),
         |(op, args): (&str, Vec<Inst>)| match op {
@@ -62,6 +69,13 @@ fn pbraceinst(inp: &str) -> IResult<&str, Inst> {
             "if" => Inst::If(Box::new(args[0].clone()),
                              Box::new(args[1].clone()),
                              Box::new(args[2].clone())),
+            "fn" => {
+                if let Inst::Deref(par_name) = &args[0] {
+                    Inst::Fn(par_name.to_string(), Box::new(args[1].clone()))
+                } else {
+                    panic!();
+                }
+            },
             _ => todo!()
         }).parse(inp)
 }
@@ -79,7 +93,7 @@ fn pcallinst(inp: &str) -> IResult<&str, Inst> {
 }
 
 fn pinst(inp: &str) -> IResult<&str, Inst> {
-    alt((plit, pderef, pbraceinst, plistinst, pcallinst)).parse(inp)
+    alt((pbind, plit, pderef, pbraceinst, plistinst, pcallinst)).parse(inp)
 }
 
 fn pinsts(inp: &str) -> IResult<&str, Vec<Inst>> {
@@ -107,6 +121,17 @@ fn eval(inst: &Inst, env: &HashMap<String, Val>) -> Result<Val, Val> {
                 Err(_) => eval(else_inst, env)
             }
         }
+        Inst::Fn(par_name, body) => {
+            let env = env.clone();
+            let body = body.clone();
+            let par_name = par_name.clone();
+            Ok(Val::Fn(AFn(Rc::new(move |arg: Val| {
+                let mut env2 = env.clone();
+                env2.insert(par_name.to_string(), arg);
+                eval(&body, &env2)
+            }))))
+        },
+        Inst::Bind(_, _) => panic!()
     }
 }
 
@@ -142,23 +167,31 @@ fn lt(arg: Val) -> Result<Val, Val> {
     }
 }
 
-fn main() {
-    // {if (< 2 3) 0 99}
-    // {if {call < {list 2 3}} 0 99}
-    /*
-    let code = Inst::If(Box::new(Inst::Call(Box::new(Inst::Lit(Val::Fn(AFn(Rc::new(lt))))),
-                                            Box::new(Inst::List(vec![Inst::Lit(Val::Int(2)), Inst::Lit(Val::Int(3))])))),
-                        Box::new(Inst::Lit(Val::Int(0))),
-                        Box::new(Inst::Lit(Val::Int(99))));
-    dbg!(eval(&code));
+fn nth(arg: Val) -> Result<Val, Val> {
+    match arg {
+        Val::List(xs) => {
+            match (xs[0].clone(), xs[1].clone()) {
+                (Val::List(ys), Val::Int(i)) => {
+                    Ok(ys[i as usize].clone())
+                },
+                _ => panic!()
+            }
+        },
+        _ => panic!()
+    }
+}
 
-    dbg!(pinst("{if 2 3 4}"));
-    */
+fn main() {
+    // ({fn [a b] (+ a b)} 2 3)
+    // ({fn args a: (nth args 0) b: (nth args 1) (+ a b)} 2 3)
+    // ({fn args (+ (nth args 0) (nth args 1))} 2 3)
 
     let glob: HashMap<String, Val> = [
         ("<".to_string(), Val::Fn(AFn(Rc::new(lt)))),
-        ("+".to_string(), Val::Fn(AFn(Rc::new(plus))))
+        ("+".to_string(), Val::Fn(AFn(Rc::new(plus)))),
+        ("nth".to_string(), Val::Fn(AFn(Rc::new(nth))))
     ].into();
-    dbg!(eval(&pinst("{if (< 4 3) 0 (+ 90 9)}").unwrap().1, &glob));
-    //dbg!(pnum("123"));
+    //dbg!(eval(&pinst("{if (< 4 3) 0 (+ 90 9)}").unwrap().1, &glob));
+    dbg!(eval(&pinst("({fn arg (+ (nth arg 0) (nth arg 1))} 1 2)").unwrap().1, &glob));
+    dbg!(pinst("{fn arg foo: (nth arg 0) foo}"));
 }
