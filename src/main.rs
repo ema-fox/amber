@@ -32,7 +32,7 @@ enum Inst {
     List(Vec<Inst>),
     Call(Box<Inst>, Box<Inst>),
     If(Box<Inst>, Box<Inst>, Box<Inst>),
-    Fn(String, Box<Inst>)
+    Fn(String, Vec<Inst>, Box<Inst>)
 }
 
 fn sym_char(inp: &str) -> IResult<&str, &str> {
@@ -60,6 +60,28 @@ fn pbind(inp: &str) -> IResult<&str, Inst> {
         |(name, _, body)| Inst::Bind(name.to_string(), Box::new(body))).parse(inp)
 }
 
+fn analyze_par(par: &Inst) -> (&str, Vec<Inst>) {
+    match par {
+        Inst::Deref(par_name) => (par_name, vec![]),
+        Inst::List(xs) => {
+            let par_name = "list"; // TODO add unique number so that there is no unintended name collision
+            let mut ys = vec![];
+            for (i, x) in xs.iter().enumerate() {
+                if let Inst::Deref(entry_name) = x {
+                    ys.push(Inst::Bind(entry_name.to_string(),
+                                       Box::new(Inst::Call(Box::new(Inst::Deref("nth".to_string())),
+                                                           Box::new(Inst::List(vec![Inst::Deref("list".to_string()),
+                                                                                    Inst::Lit(Val::Int(i as i64))]))))));
+                } else {
+                    panic!();
+                }
+            }
+            (par_name, ys)
+        }
+        _ => todo!()
+    }
+}
+
 fn pbraceinst(inp: &str) -> IResult<&str, Inst> {
     map(delimited(char('{'), (psym, pinsts), char('}')),
         |(op, args): (&str, Vec<Inst>)| match op {
@@ -70,8 +92,12 @@ fn pbraceinst(inp: &str) -> IResult<&str, Inst> {
                              Box::new(args[1].clone()),
                              Box::new(args[2].clone())),
             "fn" => {
-                if let Inst::Deref(par_name) = &args[0] {
-                    Inst::Fn(par_name.to_string(), Box::new(args[1].clone()))
+                if let [par, body @ .., tail] = args.as_slice() {
+                    let mut body_vec = vec![];
+                    let (par_name, mut destructuring_body) = analyze_par(par);
+                    body_vec.append(&mut destructuring_body);
+                    body_vec.append(&mut body.into());
+                    Inst::Fn(par_name.to_string(), body_vec, Box::new(tail.clone()))
                 } else {
                     panic!();
                 }
@@ -103,7 +129,7 @@ fn pinsts(inp: &str) -> IResult<&str, Vec<Inst>> {
 fn eval(inst: &Inst, env: &HashMap<String, Val>) -> Result<Val, Val> {
     match inst {
         Inst::Lit(x) => Ok(x.clone()),
-        Inst::Deref(x) => Ok(env.get(x).unwrap().clone()),
+        Inst::Deref(x) => Ok(env.get(x).expect(&format!("no {} in env", x)).clone()),
         Inst::List(xs) => Ok(Val::List(xs.iter().map(|x| eval(x, env).unwrap()).collect())),
         Inst::Call(finst, arginst) => {
             let f = eval(finst, env).unwrap();
@@ -121,14 +147,22 @@ fn eval(inst: &Inst, env: &HashMap<String, Val>) -> Result<Val, Val> {
                 Err(_) => eval(else_inst, env)
             }
         }
-        Inst::Fn(par_name, body) => {
+        Inst::Fn(par_name, body, tail) => {
             let env = env.clone();
             let body = body.clone();
+            let tail = tail.clone();
             let par_name = par_name.clone();
             Ok(Val::Fn(AFn(Rc::new(move |arg: Val| {
                 let mut env2 = env.clone();
                 env2.insert(par_name.to_string(), arg);
-                eval(&body, &env2)
+                for inner_inst in &body {
+                    if let Inst::Bind(binding_name, inner_inner_inst) = inner_inst {
+                        env2.insert(binding_name.to_string(), eval(&inner_inner_inst, &env2).unwrap());
+                    } else {
+                        eval(&inner_inst, &env2);
+                    }
+                }
+                eval(&tail, &env2)
             }))))
         },
         Inst::Bind(_, _) => panic!()
@@ -182,16 +216,11 @@ fn nth(arg: Val) -> Result<Val, Val> {
 }
 
 fn main() {
-    // ({fn [a b] (+ a b)} 2 3)
-    // ({fn args a: (nth args 0) b: (nth args 1) (+ a b)} 2 3)
-    // ({fn args (+ (nth args 0) (nth args 1))} 2 3)
-
     let glob: HashMap<String, Val> = [
         ("<".to_string(), Val::Fn(AFn(Rc::new(lt)))),
         ("+".to_string(), Val::Fn(AFn(Rc::new(plus)))),
         ("nth".to_string(), Val::Fn(AFn(Rc::new(nth))))
     ].into();
     //dbg!(eval(&pinst("{if (< 4 3) 0 (+ 90 9)}").unwrap().1, &glob));
-    dbg!(eval(&pinst("({fn arg (+ (nth arg 0) (nth arg 1))} 1 2)").unwrap().1, &glob));
-    dbg!(pinst("{fn arg foo: (nth arg 0) foo}"));
+    dbg!(eval(&pinst("({fn [a [b c]] (+ a b c)} 1 [8 5])").unwrap().1, &glob));
 }
