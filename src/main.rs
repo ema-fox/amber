@@ -8,6 +8,15 @@ use nom::combinator::{recognize, map};
 use nom::multi::{many0_count, many0};
 use nom::sequence::{delimited, preceded};
 
+static mut COUNTER: usize = 0;
+
+fn get_uniq_number() -> usize {
+    unsafe {
+        COUNTER += 1;
+        COUNTER
+    }
+}
+
 #[derive(Clone)]
 struct AFn(Rc<dyn Fn (Val) -> Result<Val, Val>>);
 
@@ -60,23 +69,21 @@ fn pbind(inp: &str) -> IResult<&str, Inst> {
         |(name, _, body)| Inst::Bind(name.to_string(), Box::new(body))).parse(inp)
 }
 
-fn analyze_par(par: &Inst) -> (&str, Vec<Inst>) {
+fn analyze_par(par: &Inst) -> (String, Vec<Inst>) {
     match par {
-        Inst::Deref(par_name) => (par_name, vec![]),
+        Inst::Deref(par_name) => (par_name.to_string(), vec![]),
         Inst::List(xs) => {
-            let par_name = "list"; // TODO add unique number so that there is no unintended name collision
-            let mut ys = vec![];
+            let par_name = format!("list{}", get_uniq_number());
+            let mut insts = vec![];
             for (i, x) in xs.iter().enumerate() {
-                if let Inst::Deref(entry_name) = x {
-                    ys.push(Inst::Bind(entry_name.to_string(),
-                                       Box::new(Inst::Call(Box::new(Inst::Deref("nth".to_string())),
-                                                           Box::new(Inst::List(vec![Inst::Deref("list".to_string()),
-                                                                                    Inst::Lit(Val::Int(i as i64))]))))));
-                } else {
-                    panic!();
-                }
+                let (entry_name, mut entry_insts) = analyze_par(x);
+                insts.push(Inst::Bind(entry_name.to_string(),
+                                   Box::new(Inst::Call(Box::new(Inst::Deref("nth".to_string())),
+                                                       Box::new(Inst::List(vec![Inst::Deref(par_name.clone()),
+                                                                                Inst::Lit(Val::Int(i as i64))]))))));
+                insts.append(&mut entry_insts);
             }
-            (par_name, ys)
+            (par_name, insts)
         }
         _ => todo!()
     }
@@ -222,5 +229,6 @@ fn main() {
         ("nth".to_string(), Val::Fn(AFn(Rc::new(nth))))
     ].into();
     //dbg!(eval(&pinst("{if (< 4 3) 0 (+ 90 9)}").unwrap().1, &glob));
-    dbg!(eval(&pinst("({fn [a [b c]] (+ a b c)} 1 [8 5])").unwrap().1, &glob));
+    dbg!(eval(&pinst("({fn [a b] (+ a b)} 1 8)").unwrap().1, &glob));
+    dbg!(eval(&pinst("({fn [a [[b1 b2] c]] (+ a b1 b2 c)} 1 [[8 5] 5])").unwrap().1, &glob));
 }
