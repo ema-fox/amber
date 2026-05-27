@@ -46,6 +46,7 @@ enum Inst {
 }
 
 type Env = HashMap<String, Rc<OnceCell<Val>>>;
+type YRes = Result<Val, Val>;
 
 fn sym_char(inp: &str) -> IResult<&str, &str> {
     recognize(one_of("<+-")).parse(inp)
@@ -136,6 +137,17 @@ fn pinsts(inp: &str) -> IResult<&str, Vec<Inst>> {
     many0(preceded(multispace0, pinst)).parse(inp)
 }
 
+fn eval_body(insts: &Vec<Inst>, env: &mut Env) {
+    for inst in insts {
+        if let Inst::Bind(binding_name, inner_inst) = inst {
+            env.insert(binding_name.to_string(), Rc::new(OnceCell::new()));
+            env.get(binding_name).unwrap().set(eval(&inner_inst, &env).unwrap());
+        } else {
+            eval(&inst, &env);
+        }
+    }
+}
+
 fn eval(inst: &Inst, env: &Env) -> Result<Val, Val> {
     match inst {
         Inst::Lit(x) => Ok(x.clone()),
@@ -166,13 +178,7 @@ fn eval(inst: &Inst, env: &Env) -> Result<Val, Val> {
             Ok(Val::Fn(AFn(Rc::new(move |arg: Val| {
                 let mut env2 = env.clone();
                 env2.insert(par_name.to_string(), Rc::new(arg.into()));
-                for inner_inst in &body {
-                    if let Inst::Bind(binding_name, inner_inner_inst) = inner_inst {
-                        env2.insert(binding_name.to_string(), Rc::new(eval(&inner_inner_inst, &env2).unwrap().into()));
-                    } else {
-                        eval(&inner_inst, &env2);
-                    }
-                }
+                eval_body(&body, &mut env2);
                 eval(&tail, &env2)
             }))))
         },
@@ -248,16 +254,21 @@ fn eval_str(code: &str, env: &Env) -> Result<Val, Val> {
     eval(&pinst(code).unwrap().1, &env)
 }
 
+fn eval_body_str(code: &str, env: &mut Env) {
+    eval_body(&pinsts(code).unwrap().1, env);
+}
+
 fn main() {
     let mut glob: Env = [
-        ("<".to_string(), Rc::new(OnceCell::from(Val::Fn(AFn(Rc::new(lt)))))),
-        ("+".to_string(), Rc::new(Val::Fn(AFn(Rc::new(plus))).into())),
-        ("-".to_string(), Rc::new(Val::Fn(AFn(Rc::new(minus))).into())),
-        ("nth".to_string(), Rc::new(Val::Fn(AFn(Rc::new(nth))).into()))
-    ].into();
-    glob.insert("inc".to_string(), Rc::new(eval_str("{fn [x] (+ x 1)}", &glob).unwrap().into()));
-    glob.insert("fibonacci".to_string(), Rc::new(OnceCell::new()));
-    glob.get("fibonacci").unwrap().set(eval_str("{fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}", &glob).unwrap()).unwrap();
+        ("<", lt as fn(Val) -> YRes),
+        ("+", plus as fn(Val) -> YRes),
+        ("-", minus as fn(Val) -> YRes),
+        ("nth", nth as fn(Val) -> YRes)
+    ].iter().map(|(name, f)| (name.to_string(), Rc::new(OnceCell::from(Val::Fn(AFn(Rc::new(f))))))).collect();
+    eval_body_str("
+inc: {fn [x] (+ x 1)}
+fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
+", &mut glob);
     //dbg!(eval(&pinst("{if (< 4 3) 0 (+ 90 9)}").unwrap().1, &glob));
     //dbg!(eval_str("({fn [a b] (+ a b)} 1 8)", &glob));
     dbg!(eval_str("({fn [a [[b1 b2] c]] (+ a b1 b2 c)} 1 [[8 5] 5])", &glob));
