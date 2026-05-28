@@ -2,6 +2,8 @@ use std::rc::Rc;
 use std::collections::HashMap;
 use std::cell::OnceCell;
 
+use im;
+
 use nom::{IResult, Parser};
 use nom::branch::{alt};
 use nom::character::complete::{char, one_of, alpha1, alphanumeric1, digit1, multispace0};
@@ -27,10 +29,27 @@ impl std::fmt::Debug for AFn {
     }
 }
 
-#[derive(Debug, Clone)]
+impl std::cmp::PartialEq for AFn {
+    fn eq(&self, _other: &Self) -> bool {
+        panic!()
+    }
+}
+
+
+impl std::cmp::Eq for AFn {}
+
+impl std::hash::Hash for AFn {
+    fn hash<H>(&self, _: &mut H) {
+        panic!()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Val {
     Int(i64),
+    Str(String),
     List(Vec<Val>),
+    Dict(im::HashMap<Val, Val>),
     Fn(AFn)
 }
 
@@ -40,6 +59,7 @@ enum Inst {
     Deref(String),
     Bind(String, Box<Inst>),
     List(Vec<Inst>),
+    Dict(Vec<Inst>),
     Call(Box<Inst>, Box<Inst>),
     If(Box<Inst>, Box<Inst>, Box<Inst>),
     Fn(String, Vec<Inst>, Box<Inst>)
@@ -97,6 +117,7 @@ fn pbraceinst(inp: &str) -> IResult<&str, Inst> {
     map(delimited(char('{'), (psym, pinsts), char('}')),
         |(op, args): (&str, Vec<Inst>)| match op {
             "list" => Inst::List(args),
+            "dict" => Inst::Dict(args),
             "call" => Inst::Call(Box::new(args[0].clone()),
                                  Box::new(args[1].clone())),
             "if" => Inst::If(Box::new(args[0].clone()),
@@ -148,12 +169,26 @@ fn eval_body(insts: &Vec<Inst>, env: &mut Env) {
     }
 }
 
+fn eval_dict(insts: &Vec<Inst>, env: &Env) -> im::HashMap<Val, Val> {
+    let mut dict = im::HashMap::new();
+    for inst in insts {
+        if let Inst::Bind(binding_name, inner_inst) = inst {
+            dict.insert(Val::Str(binding_name.to_string()),
+                        eval(&inner_inst, &env).unwrap());
+        } else {
+            panic!();
+        }
+    }
+    dict
+}
+
 fn eval(inst: &Inst, env: &Env) -> Result<Val, Val> {
     match inst {
         Inst::Lit(x) => Ok(x.clone()),
         Inst::Deref(x) => Ok(env.get(x).expect(&format!("no {} in env", x)).get()
                              .expect(&format!("{} not initialized", x)).clone()),
         Inst::List(xs) => Ok(Val::List(xs.iter().map(|x| eval(x, env).unwrap()).collect())),
+        Inst::Dict(xs) => Ok(Val::Dict(eval_dict(xs, env))),
         Inst::Call(finst, arginst) => {
             let f = eval(finst, env).unwrap();
             let arg = eval(arginst, env).unwrap();
@@ -271,6 +306,7 @@ fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
 ", &mut glob);
     //dbg!(eval(&pinst("{if (< 4 3) 0 (+ 90 9)}").unwrap().1, &glob));
     //dbg!(eval_str("({fn [a b] (+ a b)} 1 8)", &glob));
-    dbg!(eval_str("({fn [a [[b1 b2] c]] (+ a b1 b2 c)} 1 [[8 5] 5])", &glob));
-    dbg!(eval_str("(fibonacci 6)", &glob));
+    //dbg!(eval_str("({fn [a [[b1 b2] c]] (+ a b1 b2 c)} 1 [[8 5] 5])", &glob));
+    //dbg!(eval_str("(fibonacci 6)", &glob));
+    dbg!(eval_str("(get {dict a: 4 b: 5} \"a\")", &glob));
 }
