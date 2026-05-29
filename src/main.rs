@@ -221,68 +221,59 @@ fn eval(inst: &Inst, env: &Env) -> Result<Val, Val> {
     }
 }
 
-fn plus(arg: Val) -> Result<Val, Val> {
-    match arg {
-        Val::List(xs) => {
-            Ok(Val::Int(xs.iter().map(|x| {
+fn plus(xs: Vec<Val>) -> Result<Val, Val> {
+    Ok(Val::Int(xs.iter().map(|x| {
+        match x {
+            Val::Int(n) => n,
+            _ => panic!()
+        }
+    }).sum()))
+}
+
+fn minus(xs: Vec<Val>) -> Result<Val, Val> {
+    match xs.as_slice() {
+        [Val::Int(x), xs @ ..] =>
+            Ok(Val::Int(x - xs.iter().map(|x| {
                 match x {
                     Val::Int(n) => n,
                     _ => panic!()
                 }
-            }).sum()))
-        },
+            }).sum::<i64>())),
         _ => panic!()
     }
 }
 
-fn minus(arg: Val) -> Result<Val, Val> {
-    match arg {
-        Val::List(xs) => {
-            match xs.as_slice() {
-                [Val::Int(x), xs @ ..] =>
-                    Ok(Val::Int(x - xs.iter().map(|x| {
-                        match x {
-                            Val::Int(n) => n,
-                            _ => panic!()
-                        }
-                    }).sum::<i64>())),
-                _ => panic!()
+fn lt(xs: Vec<Val>) -> Result<Val, Val> {
+    match xs.as_slice() {
+        [Val::Int(first), Val::Int(second)] => {
+            if first < second {
+                Ok(xs[0].clone())
+            } else {
+                Err(xs[0].clone())
             }
         },
         _ => panic!()
     }
 }
 
-fn lt(arg: Val) -> Result<Val, Val> {
-    match arg {
-        Val::List(xs) => {
-            match (xs[0].clone(), xs[1].clone()) {
-                (Val::Int(first), Val::Int(second)) => {
-                    if first < second {
-                        Ok(xs[0].clone())
-                    } else {
-                        Err(xs[0].clone())
-                    }
-                },
-                _ => panic!()
-            }
+fn nth(xs: Vec<Val>) -> Result<Val, Val> {
+    match xs.as_slice() {
+        [Val::List(ys), Val::Int(i)] => {
+            Ok(ys[*i as usize].clone())
         },
         _ => panic!()
     }
 }
 
-fn nth(arg: Val) -> Result<Val, Val> {
-    match arg {
-        Val::List(xs) => {
-            match (xs[0].clone(), xs[1].clone()) {
-                (Val::List(ys), Val::Int(i)) => {
-                    Ok(ys[i as usize].clone())
-                },
-                _ => panic!()
-            }
-        },
-        _ => panic!()
-    }
+fn wrap_list_arg(f: &'static fn(Vec<Val>) -> YRes) -> AFn {
+    AFn(Rc::new(|arg: Val| {
+        match arg {
+            Val::List(xs) => {
+                f(xs)
+            },
+            _ => panic!()
+        }
+    }))
 }
 
 fn eval_str(code: &str, env: &Env) -> Result<Val, Val> {
@@ -295,11 +286,11 @@ fn eval_body_str(code: &str, env: &mut Env) {
 
 fn main() {
     let mut glob: Env = [
-        ("<", lt as fn(Val) -> YRes),
-        ("+", plus as fn(Val) -> YRes),
-        ("-", minus as fn(Val) -> YRes),
-        ("nth", nth as fn(Val) -> YRes)
-    ].iter().map(|(name, f)| (name.to_string(), Rc::new(OnceCell::from(Val::Fn(AFn(Rc::new(f))))))).collect();
+        ("<", lt as fn(Vec<Val>) -> YRes),
+        ("+", plus as fn(Vec<Val>) -> YRes),
+        ("-", minus as fn(Vec<Val>) -> YRes),
+        ("nth", nth as fn(Vec<Val>) -> YRes)
+    ].iter().map(|(name, f)| (name.to_string(), Rc::new(OnceCell::from(Val::Fn(wrap_list_arg(f)))))).collect();
     eval_body_str("
 inc: {fn [x] (+ x 1)}
 fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
@@ -307,6 +298,6 @@ fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
     //dbg!(eval(&pinst("{if (< 4 3) 0 (+ 90 9)}").unwrap().1, &glob));
     //dbg!(eval_str("({fn [a b] (+ a b)} 1 8)", &glob));
     //dbg!(eval_str("({fn [a [[b1 b2] c]] (+ a b1 b2 c)} 1 [[8 5] 5])", &glob));
-    //dbg!(eval_str("(fibonacci 6)", &glob));
-    dbg!(eval_str("(get {dict a: 4 b: 5} \"a\")", &glob));
+    dbg!(eval_str("(fibonacci 6)", &glob));
+    //dbg!(eval_str("(get {dict a: 4 b: 5} \"a\")", &glob));
 }
