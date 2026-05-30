@@ -10,6 +10,7 @@ use nom::character::complete::{char, one_of, alpha1, alphanumeric1, digit1, mult
 use nom::combinator::{recognize, map};
 use nom::multi::{many0_count, many0};
 use nom::sequence::{delimited, preceded};
+use nom::bytes::{take_till};
 
 static mut COUNTER: usize = 0;
 
@@ -84,6 +85,12 @@ fn plit(inp: &str) -> IResult<&str, Inst> {
     map(pnum, |v: &str| Inst::Lit(Val::Int(i64::from_str_radix(v, 10).unwrap()))).parse(inp)
 }
 
+fn pstrlit(inp: &str) -> IResult<&str, Inst> {
+    map(delimited(char('"'),  take_till(|c| c == '"'), char('"')),
+        |v: &str| Inst::Lit(Val::Str(v.to_string()))
+    ).parse(inp)
+}
+
 fn pderef(inp: &str) -> IResult<&str, Inst> {
     map(psym, |v: &str| Inst::Deref(v.to_string())).parse(inp)
 }
@@ -151,7 +158,7 @@ fn pcallinst(inp: &str) -> IResult<&str, Inst> {
 }
 
 fn pinst(inp: &str) -> IResult<&str, Inst> {
-    alt((pbind, plit, pderef, pbraceinst, plistinst, pcallinst)).parse(inp)
+    alt((pbind, plit, pstrlit, pderef, pbraceinst, plistinst, pcallinst)).parse(inp)
 }
 
 fn pinsts(inp: &str) -> IResult<&str, Vec<Inst>> {
@@ -265,6 +272,19 @@ fn nth(xs: Vec<Val>) -> Result<Val, Val> {
     }
 }
 
+fn get(xs: Vec<Val>) -> Result<Val, Val> {
+    match xs.as_slice() {
+        [Val::Dict(dict), key] => {
+            if let Some(val) = dict.get(&key) {
+                Ok(val.clone())
+            } else {
+                Err(key.clone())
+            }
+        }
+        _ => panic!()
+    }
+}
+
 fn wrap_list_arg(f: &'static fn(Vec<Val>) -> YRes) -> AFn {
     AFn(Rc::new(|arg: Val| {
         match arg {
@@ -289,7 +309,8 @@ fn main() {
         ("<", lt as fn(Vec<Val>) -> YRes),
         ("+", plus as fn(Vec<Val>) -> YRes),
         ("-", minus as fn(Vec<Val>) -> YRes),
-        ("nth", nth as fn(Vec<Val>) -> YRes)
+        ("nth", nth as fn(Vec<Val>) -> YRes),
+        ("get", get as fn(Vec<Val>) -> YRes)
     ].iter().map(|(name, f)| (name.to_string(), Rc::new(OnceCell::from(Val::Fn(wrap_list_arg(f)))))).collect();
     eval_body_str("
 inc: {fn [x] (+ x 1)}
@@ -299,5 +320,6 @@ fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
     //dbg!(eval_str("({fn [a b] (+ a b)} 1 8)", &glob));
     //dbg!(eval_str("({fn [a [[b1 b2] c]] (+ a b1 b2 c)} 1 [[8 5] 5])", &glob));
     dbg!(eval_str("(fibonacci 6)", &glob));
-    //dbg!(eval_str("(get {dict a: 4 b: 5} \"a\")", &glob));
+    dbg!(eval_str("\"this is a string inside of a string\"", &glob));
+    dbg!(eval_str("(get {dict a: 4 b: 5} \"c\")", &glob));
 }
