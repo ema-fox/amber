@@ -272,6 +272,21 @@ fn nth(xs: Vec<Val>) -> Result<Val, Val> {
     }
 }
 
+fn concat(xs: Vec<Val>) -> YRes {
+    let mut res = vec![];
+    for x in xs {
+        match x {
+            // I don't understand why I can make ys mut here
+            // might fail in unexpected ways
+            Val::List(mut ys) => {
+                res.append(&mut ys);
+            },
+        _ => panic!()
+        }
+    }
+    Ok(Val::List(res))
+}
+
 fn get(xs: Vec<Val>) -> Result<Val, Val> {
     match xs.as_slice() {
         [Val::Dict(dict), key] => {
@@ -281,6 +296,15 @@ fn get(xs: Vec<Val>) -> Result<Val, Val> {
                 Err(key.clone())
             }
         }
+        _ => panic!()
+    }
+}
+
+fn merge_with(xs: Vec<Val>) -> YRes {
+    match xs.as_slice() {
+        [Val::Fn(AFn(f)), Val::Dict(d0), Val::Dict(d1)] => {
+            Ok(Val::Dict(d0.clone().union_with(d1.clone(), |a, b| f(Val::List(vec![a, b])).unwrap())))
+        },
         _ => panic!()
     }
 }
@@ -310,10 +334,13 @@ fn main() {
         ("+", plus as fn(Vec<Val>) -> YRes),
         ("-", minus as fn(Vec<Val>) -> YRes),
         ("nth", nth as fn(Vec<Val>) -> YRes),
-        ("get", get as fn(Vec<Val>) -> YRes)
+        ("++", concat as fn(Vec<Val>) -> YRes),
+        ("get", get as fn(Vec<Val>) -> YRes),
+        ("merge-with", merge_with as fn(Vec<Val>) -> YRes),
     ].iter().map(|(name, f)| (name.to_string(), Rc::new(OnceCell::from(Val::Fn(wrap_list_arg(f)))))).collect();
     eval_body_str("
 inc: {fn [x] (+ x 1)}
+merge: {fn [d0 d1] (merge-with {fn [a b] b} d0 d1)}
 fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
 ", &mut glob);
     //dbg!(eval(&pinst("{if (< 4 3) 0 (+ 90 9)}").unwrap().1, &glob));
@@ -322,4 +349,6 @@ fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
     dbg!(eval_str("(fibonacci 6)", &glob));
     dbg!(eval_str("\"this is a string inside of a string\"", &glob));
     dbg!(eval_str("(get {dict a: 4 b: 5} \"c\")", &glob));
+    dbg!(eval_str("(merge {dict a: 4 b: 5} {dict a: 2 c: 3})", &glob));
+    dbg!(eval_str("(++ [1 2 3] [4] [5 6])", &glob));
 }
