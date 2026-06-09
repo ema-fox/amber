@@ -189,6 +189,26 @@ fn eval_dict(insts: &Vec<Inst>, env: &Env) -> im::HashMap<Val, Val> {
     dict
 }
 
+fn call(x: &Val, args: Val) -> YRes {
+    match x {
+        Val::Fn(f) => {
+            f.0(args)
+        },
+        Val::Dict(d) => {
+            match args {
+                Val::List(ys) => {
+                    match ys.as_slice() {
+                        [y] => get_inner(&d, y),
+                        _ => panic!()
+                    }
+                },
+                _ => panic!()
+            }
+        },
+        _ => panic!()
+    }
+}
+
 fn eval(inst: &Inst, env: &Env) -> Result<Val, Val> {
     match inst {
         Inst::Lit(x) => Ok(x.clone()),
@@ -197,14 +217,8 @@ fn eval(inst: &Inst, env: &Env) -> Result<Val, Val> {
         Inst::List(xs) => Ok(Val::List(xs.iter().map(|x| eval(x, env).unwrap()).collect())),
         Inst::Dict(xs) => Ok(Val::Dict(eval_dict(xs, env))),
         Inst::Call(finst, arginst) => {
-            let f = eval(finst, env).unwrap();
-            let arg = eval(arginst, env).unwrap();
-            match f {
-                Val::Fn(f2) => {
-                    f2.0(arg)
-                },
-                _ => panic!()
-            }
+            call(&eval(finst, env).unwrap(),
+                 eval(arginst, env).unwrap())
         },
         Inst::If(cond_inst, then_inst, else_inst) => {
             match eval(cond_inst, env) {
@@ -287,15 +301,17 @@ fn concat(xs: Vec<Val>) -> YRes {
     Ok(Val::List(res))
 }
 
+fn get_inner(dict: &im::HashMap<Val, Val>, key: &Val) -> YRes {
+    if let Some(val) = dict.get(key) {
+        Ok(val.clone())
+    } else {
+        Err(key.clone())
+    }
+}
+
 fn get(xs: Vec<Val>) -> Result<Val, Val> {
     match xs.as_slice() {
-        [Val::Dict(dict), key] => {
-            if let Some(val) = dict.get(&key) {
-                Ok(val.clone())
-            } else {
-                Err(key.clone())
-            }
-        }
+        [Val::Dict(dict), key] => get_inner(dict, key),
         _ => panic!()
     }
 }
@@ -304,6 +320,30 @@ fn merge_with(xs: Vec<Val>) -> YRes {
     match xs.as_slice() {
         [Val::Fn(AFn(f)), Val::Dict(d0), Val::Dict(d1)] => {
             Ok(Val::Dict(d0.clone().union_with(d1.clone(), |a, b| f(Val::List(vec![a, b])).unwrap())))
+        },
+        _ => panic!()
+    }
+}
+
+fn retain(xs: Vec<Val>) -> YRes {
+    match xs.as_slice() {
+        [Val::Dict(d), predicate] => {
+            let mut res = d.clone();
+            res.retain(|k, _v| call(predicate, Val::List(vec![k.clone()])).is_ok());
+            Ok(Val::Dict(res))
+        },
+        _ => panic!()
+    }
+}
+
+fn negate(xs: Vec<Val>) -> YRes {
+    match xs.as_slice() {
+        [f] => {
+            let f = f.clone();
+            Ok(Val::Fn(AFn(Rc::new(move |arg: Val| match call(&f, arg) {
+                Ok(x) => Err(x),
+                Err(x) => Ok(x)
+            }))))
         },
         _ => panic!()
     }
@@ -337,6 +377,8 @@ fn main() {
         ("++", concat as fn(Vec<Val>) -> YRes),
         ("get", get as fn(Vec<Val>) -> YRes),
         ("merge-with", merge_with as fn(Vec<Val>) -> YRes),
+        ("retain", retain as fn(Vec<Val>) -> YRes),
+        ("negate", negate as fn(Vec<Val>) -> YRes),
     ].iter().map(|(name, f)| (name.to_string(), Rc::new(OnceCell::from(Val::Fn(wrap_list_arg(f)))))).collect();
     eval_body_str("
 inc: {fn [x] (+ x 1)}
@@ -351,4 +393,6 @@ fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
     dbg!(eval_str("(get {dict a: 4 b: 5} \"c\")", &glob));
     dbg!(eval_str("(merge {dict a: 4 b: 5} {dict a: 2 c: 3})", &glob));
     dbg!(eval_str("(++ [1 2 3] [4] [5 6])", &glob));
+    dbg!(eval_str("(retain {dict a: 4 b: 5} {dict a: 1})", &glob));
+    dbg!(eval_str("(retain {dict a: 4 b: 5} (negate {dict a: 1}))", &glob));
 }
