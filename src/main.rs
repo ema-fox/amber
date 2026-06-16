@@ -120,6 +120,28 @@ fn analyze_par(par: &Inst) -> (String, Vec<Inst>) {
     }
 }
 
+fn val_to_inst(x: &Val) -> Inst {
+    match x {
+        Val::Dict(y) => {
+            match y.get(&Val::Str("op".to_string())) {
+                Some(Val::Str(op)) if op == "lit" => {
+                    Inst::Lit(y.get(&Val::Str("val".to_string())).unwrap().clone())
+                },
+                Some(Val::Str(op)) if op == "list" => {
+                    println!("It's a list");
+                    if let Val::List(args) = y.get(&Val::Str("args".to_string())).unwrap() {
+                        Inst::List(args.iter().map(val_to_inst).collect())
+                    } else {
+                        panic!();
+                    }
+                },
+                _ => panic!()
+            }
+        },
+        _ => panic!()
+    }
+}
+
 fn pbraceinst(inp: &str) -> IResult<&str, Inst> {
     map(delimited(char('{'), (psym, pinsts), char('}')),
         |(op, args): (&str, Vec<Inst>)| match op {
@@ -388,6 +410,7 @@ fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
     //dbg!(eval(&pinst("{if (< 4 3) 0 (+ 90 9)}").unwrap().1, &glob));
     //dbg!(eval_str("({fn [a b] (+ a b)} 1 8)", &glob));
     //dbg!(eval_str("({fn [a [[b1 b2] c]] (+ a b1 b2 c)} 1 [[8 5] 5])", &glob));
+    /*
     dbg!(eval_str("(fibonacci 6)", &glob));
     dbg!(eval_str("\"this is a string inside of a string\"", &glob));
     dbg!(eval_str("(get {dict a: 4 b: 5} \"c\")", &glob));
@@ -395,4 +418,8 @@ fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
     dbg!(eval_str("(++ [1 2 3] [4] [5 6])", &glob));
     dbg!(eval_str("(retain {dict a: 4 b: 5} {dict a: 1})", &glob));
     dbg!(eval_str("(retain {dict a: 4 b: 5} (negate {dict a: 1}))", &glob));
+    */
+    dbg!(eval(&val_to_inst(&eval_str("{dict op: \"list\" args: [{dict op: \"lit\" val: 5}
+{dict op: \"lit\" val: [2 3]}]}", &glob).unwrap()),
+              &glob));
 }
