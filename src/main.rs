@@ -120,20 +120,49 @@ fn analyze_par(par: &Inst) -> (String, Vec<Inst>) {
     }
 }
 
+impl TryFrom<Val> for String {
+    type Error = &'static str;
+
+    fn try_from(v: Val) -> Result<Self, Self::Error> {
+        if let Val::Str(s) = v {
+            Ok(s)
+        } else {
+            Err("Not a Val::Str")
+        }
+    }
+}
+
+impl From<&str> for Val {
+    fn from(s: &str) -> Self {
+        Val::Str(s.to_string())
+    }
+}
+
 fn val_to_inst(x: &Val) -> Inst {
     match x {
         Val::Dict(y) => {
-            match y.get(&Val::Str("op".to_string())) {
-                Some(Val::Str(op)) if op == "lit" => {
-                    Inst::Lit(y.get(&Val::Str("val".to_string())).unwrap().clone())
+            let op: String = y.get(&"op".into()).unwrap().clone().try_into().unwrap();
+            let op2: &str = &op;
+            match op2 {
+                "lit" => {
+                    Inst::Lit(y.get(&"val".into()).unwrap().clone())
                 },
-                Some(Val::Str(op)) if op == "list" => {
-                    println!("It's a list");
-                    if let Val::List(args) = y.get(&Val::Str("args".to_string())).unwrap() {
+                "list" => {
+                    if let Val::List(args) = y.get(&"args".into()).unwrap() {
                         Inst::List(args.iter().map(val_to_inst).collect())
                     } else {
                         panic!();
                     }
+                },
+                "call" => {
+                    if let Val::List(args) = y.get(&"args".into()).unwrap() {
+                        Inst::Call(Box::new(val_to_inst(&args[0])), Box::new(val_to_inst(&args[1])))
+                    } else {
+                        panic!();
+                    }
+                },
+                "deref" => {
+                    Inst::Deref(y.get(&"name".into()).unwrap().clone().try_into().unwrap())
                 },
                 _ => panic!()
             }
@@ -419,7 +448,7 @@ fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
     dbg!(eval_str("(retain {dict a: 4 b: 5} {dict a: 1})", &glob));
     dbg!(eval_str("(retain {dict a: 4 b: 5} (negate {dict a: 1}))", &glob));
     */
-    dbg!(eval(&val_to_inst(&eval_str("{dict op: \"list\" args: [{dict op: \"lit\" val: 5}
-{dict op: \"lit\" val: [2 3]}]}", &glob).unwrap()),
+    dbg!(eval(&val_to_inst(&eval_str("{dict op: \"call\" args: [{dict op: \"deref\" name: \"inc\"}
+{dict op: \"list\" args: [{dict op: \"lit\" val: 5}]}]}", &glob).unwrap()),
               &glob));
 }
