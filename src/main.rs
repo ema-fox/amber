@@ -5,15 +5,12 @@ use std::cell::OnceCell;
 use im;
 
 use nom::{IResult, Parser};
-use nom::branch::{alt};
-use nom::character::complete::{char, one_of, alpha1, alphanumeric1, digit1, multispace0};
-use nom::combinator::{recognize, map};
-use nom::multi::{many0_count, many0};
-use nom::sequence::{delimited, preceded};
-use nom::bytes::{take_till};
+use nom::combinator::{map};
 
 mod val;
 use val::{Val, AFn};
+
+mod parse;
 
 static mut COUNTER: usize = 0;
 
@@ -38,57 +35,6 @@ enum Inst {
 
 type Env = HashMap<String, Rc<OnceCell<Val>>>;
 type YRes = Result<Val, Val>;
-
-fn sym_char(inp: &str) -> IResult<&str, &str> {
-    recognize(one_of("<+-")).parse(inp)
-}
-
-fn psym(inp: &str) -> IResult<&str, &str> {
-    recognize((alt((alpha1, sym_char)), many0_count(alt((alphanumeric1, sym_char))))).parse(inp)
-}
-
-fn pnum(inp: &str) -> IResult<&str, &str> {
-    digit1.parse(inp)
-}
-
-fn pnumlit(inp: &str) -> IResult<&str, Val> {
-    map(pnum, |v: &str|
-        Val::Int(i64::from_str_radix(v, 10).unwrap())
-    ).parse(inp)
-}
-
-fn pstr(inp: &str) -> IResult<&str, &str> {
-    delimited(char('"'),  take_till(|c| c == '"'), char('"')).parse(inp)
-}
-
-fn pstrlit(inp: &str) -> IResult<&str, Val> {
-    map(pstr, |v: &str|
-        Val::Str(v.to_string())
-    ).parse(inp)
-}
-
-fn plit(inp: &str) -> IResult<&str, Val> {
-    map(alt((pnumlit, pstrlit)), |v: Val|
-        Val::Dict(im::HashMap::from(vec![
-            ("op".into(), "lit".into()),
-            ("val".into(), v)
-        ]))
-    ).parse(inp)
-}
-
-fn pderef(inp: &str) -> IResult<&str, Val> {
-    map(psym, |v: &str|
-        Val::Dict(im::HashMap::from(vec![
-            ("op".into(), "deref".into()),
-            ("name".into(), v.into())
-        ]))
-    ).parse(inp)
-}
-
-fn pbind(inp: &str) -> IResult<&str, Val> {
-    map((pinst__, (char(':'), multispace0), pinst_),
-        |(name, _, body)| create_inst("bind", vec![name, body])).parse(inp)
-}
 
 fn analyze_par(par: &Inst) -> (String, Vec<Inst>) {
     match par {
@@ -181,50 +127,12 @@ fn val_to_inst(x: &Val) -> Inst {
         _ => panic!()
     }
 }
-
-fn create_inst(op: &str, args: Vec<Val>) -> Val {
-    Val::Dict(im::HashMap::from(vec![
-        ("op".into(), op.into()),
-        ("args".into(), args.into())
-    ]))
-}
-
-fn pbraceinst(inp: &str) -> IResult<&str, Val> {
-    map(delimited(char('{'), (psym, pinsts_), char('}')),
-        |(op, args): (&str, Vec<Val>)| create_inst(op, args)
-    ).parse(inp)
-}
-
-fn plistinst(inp: &str) -> IResult<&str, Val> {
-    map(delimited(char('['), pinsts_, char(']')),
-        |entries: Vec<Val>| create_inst("list", entries)
-    ).parse(inp)
-}
-
-fn pcallinst(inp: &str) -> IResult<&str, Val> {
-    map(delimited(char('('), (pinst_, pinsts_), char(')')),
-        |(f, args): (Val, Vec<Val>)| create_inst("call", vec![f, create_inst("list", args)])
-    ).parse(inp)
-}
-
-fn pinst__(inp: &str) -> IResult<&str, Val> {
-    alt((plit, pcallinst, plistinst, pbraceinst, pderef)).parse(inp)
-}
-
-fn pinst_(inp: &str) -> IResult<&str, Val> {
-    alt((pbind, pinst__)).parse(inp)
-}
-
 fn pinst(inp: &str) -> IResult<&str, Inst> {
-    map(pinst_, |x| val_to_inst(&x)).parse(inp)
-}
-
-fn pinsts_(inp: &str) -> IResult<&str, Vec<Val>> {
-    many0(preceded(multispace0, pinst_)).parse(inp)
+    map(parse::inst, |x| val_to_inst(&x)).parse(inp)
 }
 
 fn pinsts(inp: &str) -> IResult<&str, Vec<Inst>> {
-    many0(preceded(multispace0, pinst)).parse(inp)
+    map(parse::insts, |xs| xs.iter().map(val_to_inst).collect()).parse(inp)
 }
 
 fn eval_body(insts: &Vec<Inst>, env: &mut Env) {
