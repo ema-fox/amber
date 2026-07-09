@@ -81,23 +81,43 @@ fn pnum(inp: &str) -> IResult<&str, &str> {
     digit1.parse(inp)
 }
 
-fn plit(inp: &str) -> IResult<&str, Inst> {
-    map(pnum, |v: &str| Inst::Lit(Val::Int(i64::from_str_radix(v, 10).unwrap()))).parse(inp)
-}
-
-fn pstrlit(inp: &str) -> IResult<&str, Inst> {
-    map(delimited(char('"'),  take_till(|c| c == '"'), char('"')),
-        |v: &str| Inst::Lit(Val::Str(v.to_string()))
+fn pnumlit(inp: &str) -> IResult<&str, Val> {
+    map(pnum, |v: &str|
+        Val::Int(i64::from_str_radix(v, 10).unwrap())
     ).parse(inp)
 }
 
-fn pderef(inp: &str) -> IResult<&str, Inst> {
-    map(psym, |v: &str| Inst::Deref(v.to_string())).parse(inp)
+fn pstr(inp: &str) -> IResult<&str, &str> {
+    delimited(char('"'),  take_till(|c| c == '"'), char('"')).parse(inp)
 }
 
-fn pbind(inp: &str) -> IResult<&str, Inst> {
-    map((psym, (char(':'), multispace0), pinst),
-        |(name, _, body)| Inst::Bind(name.to_string(), Box::new(body))).parse(inp)
+fn pstrlit(inp: &str) -> IResult<&str, Val> {
+    map(pstr, |v: &str|
+        Val::Str(v.to_string())
+    ).parse(inp)
+}
+
+fn plit(inp: &str) -> IResult<&str, Val> {
+    map(alt((pnumlit, pstrlit)), |v: Val|
+        Val::Dict(im::HashMap::from(vec![
+            ("op".into(), "lit".into()),
+            ("val".into(), v)
+        ]))
+    ).parse(inp)
+}
+
+fn pderef(inp: &str) -> IResult<&str, Val> {
+    map(psym, |v: &str|
+        Val::Dict(im::HashMap::from(vec![
+            ("op".into(), "deref".into()),
+            ("name".into(), v.into())
+        ]))
+    ).parse(inp)
+}
+
+fn pbind(inp: &str) -> IResult<&str, Val> {
+    map((pinst__, (char(':'), multispace0), pinst_),
+        |(name, _, body)| create_inst("bind", vec![name, body])).parse(inp)
 }
 
 fn analyze_par(par: &Inst) -> (String, Vec<Inst>) {
@@ -120,6 +140,31 @@ fn analyze_par(par: &Inst) -> (String, Vec<Inst>) {
     }
 }
 
+impl Val {
+    fn get<K>(&self, k: K) -> &Val
+    where
+        K: Into<Val>
+    {
+        if let Val::Dict(d) = self {
+            d.get(&k.into()).unwrap()
+        } else {
+            panic!();
+        }
+    }
+}
+
+impl TryFrom<&Val> for String {
+    type Error = &'static str;
+
+    fn try_from(v: &Val) -> Result<Self, Self::Error> {
+        if let Val::Str(s) = v {
+            Ok(s.clone())
+        } else {
+            Err("Not a Val::Str")
+        }
+    }
+}
+
 impl TryFrom<Val> for String {
     type Error = &'static str;
 
@@ -138,6 +183,12 @@ impl From<&str> for Val {
     }
 }
 
+impl From<Vec<Val>> for Val {
+    fn from(xs: Vec<Val>) -> Self {
+        Val::List(xs)
+    }
+}
+
 fn val_to_inst(x: &Val) -> Inst {
     match x {
         Val::Dict(y) => {
@@ -147,9 +198,24 @@ fn val_to_inst(x: &Val) -> Inst {
                 "lit" => {
                     Inst::Lit(y.get(&"val".into()).unwrap().clone())
                 },
+                "bind" => {
+                    if let Val::List(args) = y.get(&"args".into()).unwrap() {
+                        Inst::Bind(args[0].get("name").try_into().unwrap(),
+                                   Box::new(val_to_inst(&args[1])))
+                    } else {
+                        panic!();
+                    }
+                },
                 "list" => {
                     if let Val::List(args) = y.get(&"args".into()).unwrap() {
                         Inst::List(args.iter().map(val_to_inst).collect())
+                    } else {
+                        panic!();
+                    }
+                },
+                "dict" => {
+                    if let Val::List(args) = y.get(&"args".into()).unwrap() {
+                        Inst::Dict(args.iter().map(val_to_inst).collect())
                     } else {
                         panic!();
                     }
@@ -164,52 +230,76 @@ fn val_to_inst(x: &Val) -> Inst {
                 "deref" => {
                     Inst::Deref(y.get(&"name".into()).unwrap().clone().try_into().unwrap())
                 },
-                _ => panic!()
+                "if" => {
+                    if let Val::List(args) = y.get(&"args".into()).unwrap() {
+                        Inst::If(Box::new(val_to_inst(&args[0])),
+                                 Box::new(val_to_inst(&args[1])),
+                                 Box::new(val_to_inst(&args[2])))
+                    } else {
+                        panic!();
+                    }
+                },
+                "fn" => {
+                    if let Val::List(args) = y.get(&"args".into()).unwrap() {
+                        if let [par, body @ .., tail] = args.iter().map(val_to_inst).collect::<Vec<_>>().as_slice() {
+                            let mut body_vec = vec![];
+                            let (par_name, mut destructuring_body) = analyze_par(par);
+                            body_vec.append(&mut destructuring_body);
+                            body_vec.append(&mut body.into());
+                            Inst::Fn(par_name.to_string(), body_vec, Box::new(tail.clone()))
+                        } else {
+                            panic!();
+                        }
+                    } else {
+                        panic!();
+                    }
+                }
+                _ => panic!("Unknown op: {}", op2)
             }
         },
         _ => panic!()
     }
 }
 
-fn pbraceinst(inp: &str) -> IResult<&str, Inst> {
-    map(delimited(char('{'), (psym, pinsts), char('}')),
-        |(op, args): (&str, Vec<Inst>)| match op {
-            "list" => Inst::List(args),
-            "dict" => Inst::Dict(args),
-            "call" => Inst::Call(Box::new(args[0].clone()),
-                                 Box::new(args[1].clone())),
-            "if" => Inst::If(Box::new(args[0].clone()),
-                             Box::new(args[1].clone()),
-                             Box::new(args[2].clone())),
-            "fn" => {
-                if let [par, body @ .., tail] = args.as_slice() {
-                    let mut body_vec = vec![];
-                    let (par_name, mut destructuring_body) = analyze_par(par);
-                    body_vec.append(&mut destructuring_body);
-                    body_vec.append(&mut body.into());
-                    Inst::Fn(par_name.to_string(), body_vec, Box::new(tail.clone()))
-                } else {
-                    panic!();
-                }
-            },
-            _ => todo!()
-        }).parse(inp)
+fn create_inst(op: &str, args: Vec<Val>) -> Val {
+    Val::Dict(im::HashMap::from(vec![
+        ("op".into(), op.into()),
+        ("args".into(), args.into())
+    ]))
 }
 
-fn plistinst(inp: &str) -> IResult<&str, Inst> {
-    map(delimited(char('['), pinsts, char(']')),
-        |entries: Vec<Inst>| Inst::List(entries)
+fn pbraceinst(inp: &str) -> IResult<&str, Val> {
+    map(delimited(char('{'), (psym, pinsts_), char('}')),
+        |(op, args): (&str, Vec<Val>)| create_inst(op, args)
     ).parse(inp)
 }
 
-fn pcallinst(inp: &str) -> IResult<&str, Inst> {
-    map(delimited(char('('), (pinst, pinsts), char(')')),
-        |(f, args): (Inst, Vec<Inst>)| Inst::Call(Box::new(f), Box::new(Inst::List(args)))
+fn plistinst(inp: &str) -> IResult<&str, Val> {
+    map(delimited(char('['), pinsts_, char(']')),
+        |entries: Vec<Val>| create_inst("list", entries)
     ).parse(inp)
+}
+
+fn pcallinst(inp: &str) -> IResult<&str, Val> {
+    map(delimited(char('('), (pinst_, pinsts_), char(')')),
+        |(f, args): (Val, Vec<Val>)| create_inst("call", vec![f, create_inst("list", args)])
+    ).parse(inp)
+}
+
+fn pinst__(inp: &str) -> IResult<&str, Val> {
+    alt((plit, pcallinst, plistinst, pbraceinst, pderef)).parse(inp)
+}
+
+fn pinst_(inp: &str) -> IResult<&str, Val> {
+    alt((pbind, pinst__)).parse(inp)
 }
 
 fn pinst(inp: &str) -> IResult<&str, Inst> {
-    alt((pbind, plit, pstrlit, pderef, pbraceinst, plistinst, pcallinst)).parse(inp)
+    map(pinst_, |x| val_to_inst(&x)).parse(inp)
+}
+
+fn pinsts_(inp: &str) -> IResult<&str, Vec<Val>> {
+    many0(preceded(multispace0, pinst_)).parse(inp)
 }
 
 fn pinsts(inp: &str) -> IResult<&str, Vec<Inst>> {
@@ -406,7 +496,7 @@ fn wrap_list_arg(f: &'static fn(Vec<Val>) -> YRes) -> AFn {
             Val::List(xs) => {
                 f(xs)
             },
-            _ => panic!()
+            _ => panic!("{:?} is not a list", arg)
         }
     }))
 }
@@ -436,10 +526,9 @@ inc: {fn [x] (+ x 1)}
 merge: {fn [d0 d1] (merge-with {fn [a b] b} d0 d1)}
 fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
 ", &mut glob);
-    //dbg!(eval(&pinst("{if (< 4 3) 0 (+ 90 9)}").unwrap().1, &glob));
-    //dbg!(eval_str("({fn [a b] (+ a b)} 1 8)", &glob));
-    //dbg!(eval_str("({fn [a [[b1 b2] c]] (+ a b1 b2 c)} 1 [[8 5] 5])", &glob));
-    /*
+    dbg!(eval(&pinst("{if (< 4 3) 0 (+ 90 9)}").unwrap().1, &glob));
+    dbg!(eval_str("({fn [a b] (+ a b)} 1 8)", &glob));
+    dbg!(eval_str("({fn [a [[b1 b2] c]] (+ a b1 b2 c)} 1 [[8 5] 5])", &glob));
     dbg!(eval_str("(fibonacci 6)", &glob));
     dbg!(eval_str("\"this is a string inside of a string\"", &glob));
     dbg!(eval_str("(get {dict a: 4 b: 5} \"c\")", &glob));
@@ -447,7 +536,6 @@ fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
     dbg!(eval_str("(++ [1 2 3] [4] [5 6])", &glob));
     dbg!(eval_str("(retain {dict a: 4 b: 5} {dict a: 1})", &glob));
     dbg!(eval_str("(retain {dict a: 4 b: 5} (negate {dict a: 1}))", &glob));
-    */
     dbg!(eval(&val_to_inst(&eval_str("{dict op: \"call\" args: [{dict op: \"deref\" name: \"inc\"}
 {dict op: \"list\" args: [{dict op: \"lit\" val: 5}]}]}", &glob).unwrap()),
               &glob));
