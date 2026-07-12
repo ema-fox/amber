@@ -1,5 +1,7 @@
 use std::rc::Rc;
 
+use im::HashMap;
+
 #[derive(Clone)]
 pub struct AFn(pub Rc<dyn Fn (Val) -> Result<Val, Val>>);
 
@@ -29,7 +31,7 @@ pub enum Val {
     Int(i64),
     Str(String),
     List(Vec<Val>),
-    Dict(im::HashMap<Val, Val>),
+    Dict(HashMap<Val, Val>),
     Fn(AFn)
 }
 
@@ -71,14 +73,26 @@ impl TryFrom<Val> for String {
     }
 }
 
+impl From<i64> for Val {
+    fn from(x: i64) -> Self {
+        Val::Int(x)
+    }
+}
+
 impl From<&str> for Val {
     fn from(s: &str) -> Self {
         Val::Str(s.to_string())
     }
 }
 
-impl From<Vec<Val>> for Val {
-    fn from(xs: Vec<Val>) -> Self {
-        Val::List(xs)
+impl<T> From<Vec<T>> for Val where Val: From<T> {
+    fn from(xs: Vec<T>) -> Self {
+        Val::List(xs.into_iter().map(Self::from).collect())
+    }
+}
+
+impl<K, V> From<HashMap<K, V>> for Val where Val: From<K> + From<V>, K: Clone, V: Clone {
+    fn from(m: HashMap<K, V>) -> Self {
+        Val::Dict(m.iter().map(|(k, v)| (Self::from(k.clone()), Val::from(v.clone()))).collect())
     }
 }
