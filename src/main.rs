@@ -355,17 +355,35 @@ inc: {fn [x] (+ x 1)}
 merge: {fn [d0 d1] (merge-with {fn [a b] b} d0 d1)}
 fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
 ", &mut glob);
-    dbg!(eval(&pinst("{if (< 4 3) 0 (+ 90 9)}").unwrap().1, &glob));
-    dbg!(eval_str("({fn [a b] (+ a b)} 1 8)", &glob));
-    dbg!(eval_str("({fn [a [[b1 b2] c]] (+ a b1 b2 c)} 1 [[8 5] 5])", &glob));
-    dbg!(eval_str("(fibonacci 6)", &glob));
-    dbg!(eval_str("\"this is a string inside of a string\"", &glob));
-    dbg!(eval_str("(get {dict a: 4 b: 5} \"c\")", &glob));
-    dbg!(eval_str("(merge {dict a: 4 b: 5} {dict a: 2 c: 3})", &glob));
-    dbg!(eval_str("(++ [1 2 3] [4] [5 6])", &glob));
-    dbg!(eval_str("(retain {dict a: 4 b: 5} {dict a: 1})", &glob));
-    dbg!(eval_str("(retain {dict a: 4 b: 5} (negate {dict a: 1}))", &glob));
-    dbg!(eval(&val_to_inst(&eval_str("{dict op: \"call\" args: [{dict op: \"deref\" name: \"inc\"}
+    assert_eq!(eval(&pinst("{if (< 4 3) 0 (+ 90 9)}").unwrap().1, &glob), Ok(99.into()));
+    assert_eq!(eval_str("({fn [a b] (+ a b)} 1 8)", &glob), Ok(9.into()));
+    assert_eq!(eval_str("({fn [a [[b1 b2] c]] (+ a b1 b2 c)} 1 [[8 5] 5])", &glob), Ok(19.into()));
+    assert_eq!(eval_str("(fibonacci 6)", &glob), Ok(8.into()));
+    assert_eq!(
+        eval_str("\"this is a string inside of a string\"", &glob),
+        Ok("this is a string inside of a string".into())
+    );
+    assert_eq!(eval_str("(get {dict a: 4 b: 5} \"c\")", &glob), Err("c".into()));
+    assert_eq!(
+        eval_str("(merge {dict a: 4 b: 5} {dict a: 2 c: 3})", &glob),
+        Ok(im::HashMap::from(vec![("c", 3), ("b", 5), ("a", 2)]).into())
+    );
+    assert_eq!(
+        eval_str("(++ [1 2 3] [4] [5 6])", &glob),
+        Ok(vec![1, 2, 3, 4, 5, 6].into())
+    );
+    assert_eq!(
+        eval_str("(retain {dict a: 4 b: 5} {dict a: 1})", &glob),
+        Ok(im::HashMap::from(vec![("a", 4)]).into())
+    );
+    assert_eq!(
+        eval_str("(retain {dict a: 4 b: 5} (negate {dict a: 1}))", &glob),
+        Ok(im::HashMap::from(vec![("b", 5)]).into())
+    );
+    assert_eq!(
+        eval(&val_to_inst(&eval_str("{dict op: \"call\" args: [{dict op: \"deref\" name: \"inc\"}
 {dict op: \"list\" args: [{dict op: \"lit\" val: 5}]}]}", &glob).unwrap()),
-              &glob));
+             &glob),
+        Ok(6.into())
+    );
 }
