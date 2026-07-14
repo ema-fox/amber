@@ -139,9 +139,9 @@ fn eval_body(insts: &Vec<Inst>, env: &mut Env) {
     for inst in insts {
         if let Inst::Bind(binding_name, inner_inst) = inst {
             env.insert(binding_name.to_string(), Rc::new(OnceCell::new()));
-            env.get(binding_name).unwrap().set(eval(&inner_inst, &env).unwrap());
+            env.get(binding_name).unwrap().set(eval(&inner_inst, &env).unwrap()).unwrap();
         } else {
-            eval(&inst, &env);
+            eval(&inst, &env).unwrap();
         }
     }
 }
