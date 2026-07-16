@@ -9,7 +9,7 @@ use nom::bytes::{take_till};
 use crate::val::{Val};
 
 fn sym_char(inp: &str) -> IResult<&str, &str> {
-    recognize(one_of("<+-")).parse(inp)
+    recognize(one_of("=<+-/")).parse(inp)
 }
 
 fn psym(inp: &str) -> IResult<&str, &str> {

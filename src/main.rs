@@ -1,6 +1,7 @@
 use std::rc::Rc;
 use std::collections::HashMap;
 use std::cell::OnceCell;
+use std::io::{self, Write};
 
 use im;
 
@@ -234,6 +235,32 @@ fn minus(xs: Vec<Val>) -> Result<Val, Val> {
     }
 }
 
+fn div(xs: Vec<Val>) -> Result<Val, Val> {
+    match xs.as_slice() {
+        [Val::Int(x), xs @ ..] =>
+            Ok(Val::Int(x / xs.iter().map(|x| {
+                match x {
+                    Val::Int(n) => n,
+                    _ => panic!()
+                }
+            }).product::<i64>())),
+        _ => panic!()
+    }
+}
+
+fn eq(xs: Vec<Val>) -> Result<Val, Val> {
+    match xs.as_slice() {
+        [first, second] => {
+            if first == second {
+                Ok(xs[0].clone())
+            } else {
+                Err(xs[0].clone())
+            }
+        },
+        _ => panic!()
+    }
+}
+
 fn lt(xs: Vec<Val>) -> Result<Val, Val> {
     match xs.as_slice() {
         [Val::Int(first), Val::Int(second)] => {
@@ -319,6 +346,32 @@ fn negate(xs: Vec<Val>) -> YRes {
     }
 }
 
+fn say(xs: Vec<Val>) -> YRes {
+    for x in &xs {
+        match x {
+            Val::Str(s) => print!("{}", s),
+            _ => panic!()
+        }
+    }
+    println!("");
+    Ok(xs[0].clone()) // TODO think about return value
+}
+
+fn ask(xs: Vec<Val>) -> YRes {
+    for x in &xs {
+        match x {
+            Val::Str(s) => print!("{}", s),
+            _ => panic!()
+        }
+    }
+    io::stdout().flush().unwrap();
+
+    let stdin = io::stdin();
+    let mut res = "".to_string();
+    stdin.read_line(&mut res).unwrap();
+    Ok(Val::Str(res.trim_end_matches(&['\r', '\n'][..]).to_string()))
+}
+
 fn wrap_list_arg(f: &'static fn(Vec<Val>) -> YRes) -> AFn {
     AFn(Rc::new(|arg: Val| {
         match arg {
@@ -340,15 +393,19 @@ fn eval_body_str(code: &str, env: &mut Env) {
 
 fn main() {
     let mut glob: Env = [
+        ("=", eq as fn(Vec<Val>) -> YRes),
         ("<", lt as fn(Vec<Val>) -> YRes),
         ("+", plus as fn(Vec<Val>) -> YRes),
         ("-", minus as fn(Vec<Val>) -> YRes),
+        ("/", div as fn(Vec<Val>) -> YRes),
         ("nth", nth as fn(Vec<Val>) -> YRes),
         ("++", concat as fn(Vec<Val>) -> YRes),
         ("get", get as fn(Vec<Val>) -> YRes),
         ("merge-with", merge_with as fn(Vec<Val>) -> YRes),
         ("retain", retain as fn(Vec<Val>) -> YRes),
         ("negate", negate as fn(Vec<Val>) -> YRes),
+        ("say", say as fn(Vec<Val>) -> YRes),
+        ("ask", ask as fn(Vec<Val>) -> YRes),
     ].iter().map(|(name, f)| (name.to_string(), Rc::new(OnceCell::from(Val::Fn(wrap_list_arg(f)))))).collect();
     eval_body_str("
 inc: {fn [x] (+ x 1)}
