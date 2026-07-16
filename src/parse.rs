@@ -1,7 +1,7 @@
 use nom::{IResult, Parser};
 use nom::branch::{alt};
 use nom::character::complete::{char, one_of, alpha1, alphanumeric1, digit1, multispace0};
-use nom::combinator::{recognize, map};
+use nom::combinator::{recognize, map, cut};
 use nom::multi::{many0_count, many0};
 use nom::sequence::{delimited, preceded};
 use nom::bytes::{take_till};
@@ -27,7 +27,7 @@ fn pnumlit(inp: &str) -> IResult<&str, Val> {
 }
 
 fn pstr(inp: &str) -> IResult<&str, &str> {
-    delimited(char('"'),  take_till(|c| c == '"'), char('"')).parse(inp)
+    delimited(char('"'),  take_till(|c| c == '"'), cut(char('"'))).parse(inp)
 }
 
 fn pstrlit(inp: &str) -> IResult<&str, Val> {
@@ -55,7 +55,7 @@ fn pderef(inp: &str) -> IResult<&str, Val> {
 }
 
 fn pbind(inp: &str) -> IResult<&str, Val> {
-    map((pinst_, (char(':'), multispace0), inst),
+    map((pinst_, (char(':'), multispace0), cut(inst)),
         |(name, _, body)| create_inst("bind", vec![name, body])).parse(inp)
 }
 
@@ -68,7 +68,7 @@ fn create_inst(op: &str, args: Vec<Val>) -> Val {
 }
 
 fn pbraceinst(inp: &str) -> IResult<&str, Val> {
-    map(delimited(char('{'), (psym, insts), char('}')),
+    map(delimited(char('{'), (psym, insts), cut(char('}'))),
         |(op, args): (&str, Vec<Val>)| create_inst(op, args)
     ).parse(inp)
 }
