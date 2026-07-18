@@ -129,6 +129,7 @@ fn val_to_inst(x: &Val) -> Inst {
         _ => panic!()
     }
 }
+
 fn pinst(inp: &str) -> IResult<&str, Inst> {
     map(parse::inst, |x| val_to_inst(&x)).parse(inp)
 }
