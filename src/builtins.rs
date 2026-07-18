@@ -164,25 +164,24 @@ fn negate(xs: Vec<Val>) -> YRes {
     }
 }
 
-
-fn say(xs: Vec<Val>) -> YRes {
+fn print(xs: Vec<Val>) {
     for x in &xs {
         match x {
             Val::Str(s) => print!("{}", s),
+            Val::Int(x) => print!("{}", x),
             _ => panic!()
         }
     }
+}
+
+fn say(xs: Vec<Val>) -> YRes {
+    print(xs.clone());
     println!("");
     Ok(xs[0].clone()) // TODO think about return value
 }
 
 fn ask(xs: Vec<Val>) -> YRes {
-    for x in &xs {
-        match x {
-            Val::Str(s) => print!("{}", s),
-            _ => panic!()
-        }
-    }
+    print(xs);
     io::stdout().flush().unwrap();
 
     let stdin = io::stdin();
