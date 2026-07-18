@@ -1,5 +1,7 @@
 use std::rc::Rc;
 use std::cell::OnceCell;
+use std::fs::read_to_string;
+use std::env;
 
 use im;
 
@@ -238,4 +240,9 @@ fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
              &glob),
         Ok(6.into())
     );
+
+    let args: Vec<String> = env::args().collect();
+    if let [_, path] = args.as_slice() {
+        eval_body_str(&read_to_string(path).unwrap(), &mut glob);
+    }
 }
