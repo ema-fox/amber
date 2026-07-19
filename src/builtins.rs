@@ -27,7 +27,7 @@ pub fn call(x: &Val, args: Val) -> YRes {
                 _ => panic!()
             }
         },
-        _ => panic!()
+        _ => panic!("Value is not callable") // TODO give more information about `x`
     }
 }
 

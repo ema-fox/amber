@@ -5,9 +5,6 @@ use std::env;
 
 use im;
 
-use nom::{IResult, Parser};
-use nom::combinator::{map};
-
 mod val;
 use val::{Val, AFn};
 
@@ -37,6 +34,20 @@ enum Inst {
     Fn(String, Vec<Inst>, Box<Inst>)
 }
 
+fn macro_expand(form: Val, env: &Env) -> Val {
+    if let Some(op) = form.try_get("op") {
+        let op_str: String = format!("op-{}", String::try_from(op).unwrap());
+        if let Some(mac) = deref(env, &op_str) {
+            call(&mac, form.try_get("args").unwrap().clone()).unwrap()
+        } else {
+            if let Some(Val::List(args)) = form.try_get("args") {
+                let mut form2 = form.clone();
+                form2.insert("args", args.iter().map(|arg| macro_expand(arg.clone(), env)).collect::<Vec<_>>());
+                form2
+            } else {form}
+        }
+    } else {form}
+}
 
 fn analyze_par(par: &Inst) -> (String, Vec<Inst>) {
     match par {
@@ -130,14 +141,6 @@ fn val_to_inst(x: &Val) -> Inst {
     }
 }
 
-fn pinst(inp: &str) -> IResult<&str, Inst> {
-    map(parse::inst, |x| val_to_inst(&x)).parse(inp)
-}
-
-fn pinsts(inp: &str) -> IResult<&str, Vec<Inst>> {
-    map(parse::insts, |xs| xs.iter().map(val_to_inst).collect()).parse(inp)
-}
-
 fn eval_body(insts: &Vec<Inst>, env: &mut Env) {
     for inst in insts {
         if let Inst::Bind(binding_name, inner_inst) = inst {
@@ -147,6 +150,29 @@ fn eval_body(insts: &Vec<Inst>, env: &mut Env) {
             eval(&inst, &env).unwrap();
         }
     }
+}
+
+fn eval_val(vinst: &Val, env: &Env) -> YRes {
+    let inst = val_to_inst(&macro_expand(vinst.clone(), env));
+    eval(&inst, &env)
+}
+
+fn eval_vals(vinsts: &Vec<Val>, env: &mut Env) {
+    for vinst in vinsts {
+        let inst = val_to_inst(&macro_expand(vinst.clone(), env));
+        if let Inst::Bind(binding_name, inner_inst) = inst {
+            env.insert(binding_name.to_string(), Rc::new(OnceCell::new()));
+            env.get(&binding_name).unwrap().set(eval(&inner_inst, &env).unwrap()).unwrap();
+        } else {
+            eval(&inst, &env).unwrap();
+        }
+    }
+}
+
+fn deref(env: &Env, x: &str) -> Option<Val> {
+        env.get(x).map(|y| {
+            y.get().expect(&format!("{} not initialized", x)).clone()
+        })
 }
 
 fn eval_dict(insts: &Vec<Inst>, env: &Env) -> im::HashMap<Val, Val> {
@@ -165,8 +191,7 @@ fn eval_dict(insts: &Vec<Inst>, env: &Env) -> im::HashMap<Val, Val> {
 fn eval(inst: &Inst, env: &Env) -> YRes {
     match inst {
         Inst::Lit(x) => Ok(x.clone()),
-        Inst::Deref(x) => Ok(env.get(x).expect(&format!("no {} in env", x)).get()
-                             .expect(&format!("{} not initialized", x)).clone()),
+        Inst::Deref(x) => Ok(deref(env, x).expect(&format!("no {} in env", x))),
         Inst::List(xs) => Ok(Val::List(xs.iter().map(|x| eval(x, env).unwrap()).collect())),
         Inst::Dict(xs) => Ok(Val::Dict(eval_dict(xs, env))),
         Inst::Call(finst, arginst) => {
@@ -196,21 +221,25 @@ fn eval(inst: &Inst, env: &Env) -> YRes {
 }
 
 fn eval_str(code: &str, env: &Env) -> YRes {
-    eval(&pinst(code).unwrap().1, &env)
+    eval_val(&parse::inst(code).unwrap().1, &env)
 }
 
 fn eval_body_str(code: &str, env: &mut Env) {
-    eval_body(&pinsts(code).unwrap().1, env);
+    eval_vals(&parse::insts(code).unwrap().1, env);
 }
 
 fn main() {
     let mut glob: Env = builtins::get();
     eval_body_str("
+op-do: {fn body
+  {dict op: \"call\"
+   args: [{dict op: \"fn\" args: (++ [{dict op: \"list\" args: []}] body)}
+          {dict op: \"list\" args: []}]}}
 inc: {fn [x] (+ x 1)}
 merge: {fn [d0 d1] (merge-with {fn [a b] b} d0 d1)}
 fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
 ", &mut glob);
-    assert_eq!(eval(&pinst("{if (< 4 3) 0 (+ 90 9)}").unwrap().1, &glob), Ok(99.into()));
+    assert_eq!(eval_str("{if (< 4 3) {do 0} (+ 90 9)}", &glob), Ok(99.into()));
     assert_eq!(eval_str("({fn [a b] (+ a b)} 1 8)", &glob), Ok(9.into()));
     assert_eq!(eval_str("({fn [a [[b1 b2] c]] (+ a b1 b2 c)} 1 [[8 5] 5])", &glob), Ok(19.into()));
     assert_eq!(eval_str("(fibonacci 6)", &glob), Ok(8.into()));
