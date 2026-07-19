@@ -228,17 +228,13 @@ fn eval_body_str(code: &str, env: &mut Env) {
     eval_vals(&parse::insts(code).unwrap().1, env);
 }
 
+fn eval_file(path: &str, env: &mut Env) {
+    eval_body_str(&read_to_string(path).unwrap(), env);
+}
+
 fn main() {
     let mut glob: Env = builtins::get();
-    eval_body_str("
-op-do: {fn body
-  {dict op: \"call\"
-   args: [{dict op: \"fn\" args: (++ [{dict op: \"list\" args: []}] body)}
-          {dict op: \"list\" args: []}]}}
-inc: {fn [x] (+ x 1)}
-merge: {fn [d0 d1] (merge-with {fn [a b] b} d0 d1)}
-fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
-", &mut glob);
+    eval_file("prelude.br", &mut glob);
     assert_eq!(eval_str("{if (< 4 3) {do 0} (+ 90 9)}", &glob), Ok(99.into()));
     assert_eq!(eval_str("({fn [a b] (+ a b)} 1 8)", &glob), Ok(9.into()));
     assert_eq!(eval_str("({fn [a [[b1 b2] c]] (+ a b1 b2 c)} 1 [[8 5] 5])", &glob), Ok(19.into()));
@@ -273,6 +269,6 @@ fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
 
     let args: Vec<String> = env::args().collect();
     if let [_, path] = args.as_slice() {
-        eval_body_str(&read_to_string(path).unwrap(), &mut glob);
+        eval_file(path, &mut glob);
     }
 }

@@ -1,0 +1,10 @@
+op-do: {fn body
+  {dict op: "call"
+   args: [{dict op: "fn" args: (++ [{dict op: "list" args: []}] body)}
+          {dict op: "list" args: []}]}}
+
+inc: {fn [x] (+ x 1)}
+
+merge: {fn [d0 d1] (merge-with {fn [a b] b} d0 d1)}
+
+fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
