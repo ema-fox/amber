@@ -79,57 +79,39 @@ fn val_to_inst(x: &Val) -> Inst {
                     Inst::Lit(y.get(&"val".into()).unwrap().clone())
                 },
                 "bind" => {
-                    if let Val::List(args) = y.get(&"args".into()).unwrap() {
-                        Inst::Bind(args[0].get("name").try_into().unwrap(),
-                                   Box::new(val_to_inst(&args[1])))
-                    } else {
-                        panic!();
-                    }
+                    let args: Vec<Val> = y.get(&"args".into()).unwrap().clone().try_into().unwrap();
+                    Inst::Bind(args[0].get("name").try_into().unwrap(),
+                               Box::new(val_to_inst(&args[1])))
                 },
                 "list" => {
-                    if let Val::List(args) = y.get(&"args".into()).unwrap() {
-                        Inst::List(args.iter().map(val_to_inst).collect())
-                    } else {
-                        panic!();
-                    }
+                    let args: Vec<Val> = y.get(&"args".into()).unwrap().clone().try_into().unwrap();
+                    Inst::List(args.iter().map(val_to_inst).collect())
                 },
                 "dict" => {
-                    if let Val::List(args) = y.get(&"args".into()).unwrap() {
-                        Inst::Dict(args.iter().map(val_to_inst).collect())
-                    } else {
-                        panic!();
-                    }
+                    let args: Vec<Val> = y.get(&"args".into()).unwrap().clone().try_into().unwrap();
+                    Inst::Dict(args.iter().map(val_to_inst).collect())
                 },
                 "call" => {
-                    if let Val::List(args) = y.get(&"args".into()).unwrap() {
-                        Inst::Call(Box::new(val_to_inst(&args[0])), Box::new(val_to_inst(&args[1])))
-                    } else {
-                        panic!();
-                    }
+                    let args: Vec<Val> = y.get(&"args".into()).unwrap().clone().try_into().unwrap();
+                    Inst::Call(Box::new(val_to_inst(&args[0])), Box::new(val_to_inst(&args[1])))
                 },
                 "deref" => {
                     Inst::Deref(y.get(&"name".into()).unwrap().clone().try_into().unwrap())
                 },
                 "if" => {
-                    if let Val::List(args) = y.get(&"args".into()).unwrap() {
-                        Inst::If(Box::new(val_to_inst(&args[0])),
-                                 Box::new(val_to_inst(&args[1])),
-                                 Box::new(val_to_inst(&args[2])))
-                    } else {
-                        panic!();
-                    }
+                    let args: Vec<Val> = y.get(&"args".into()).unwrap().clone().try_into().unwrap();
+                    Inst::If(Box::new(val_to_inst(&args[0])),
+                             Box::new(val_to_inst(&args[1])),
+                             Box::new(val_to_inst(&args[2])))
                 },
                 "fn" => {
-                    if let Val::List(args) = y.get(&"args".into()).unwrap() {
-                        if let [par, body @ .., tail] = args.iter().map(val_to_inst).collect::<Vec<_>>().as_slice() {
-                            let mut body_vec = vec![];
-                            let (par_name, mut destructuring_body) = analyze_par(par);
-                            body_vec.append(&mut destructuring_body);
-                            body_vec.append(&mut body.into());
-                            Inst::Fn(par_name.to_string(), body_vec, Box::new(tail.clone()))
-                        } else {
-                            panic!();
-                        }
+                    let args: Vec<Val> = y.get(&"args".into()).unwrap().clone().try_into().unwrap();
+                    if let [par, body @ .., tail] = args.iter().map(val_to_inst).collect::<Vec<_>>().as_slice() {
+                        let mut body_vec = vec![];
+                        let (par_name, mut destructuring_body) = analyze_par(par);
+                        body_vec.append(&mut destructuring_body);
+                        body_vec.append(&mut body.into());
+                        Inst::Fn(par_name.to_string(), body_vec, Box::new(tail.clone()))
                     } else {
                         panic!();
                     }

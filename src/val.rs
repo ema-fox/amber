@@ -94,6 +94,30 @@ impl TryFrom<Val> for String {
     }
 }
 
+impl TryFrom<Val> for Vec<Val> {
+    type Error = &'static str;
+
+    fn try_from(v: Val) -> Result<Self, Self::Error> {
+        if let Val::List(xs) = v {
+            Ok(xs)
+        } else {
+            Err("Not a Val::List")
+        }
+    }
+}
+
+impl<T> TryFrom<Val> for Vec<T> where T: TryFrom<Val, Error = &'static str> {
+    type Error = &'static str;
+
+    fn try_from(v: Val) -> Result<Self, Self::Error> {
+        if let Val::List(xs) = v {
+            xs.into_iter().map(T::try_from).collect()
+        } else {
+            Err("Not a Val::List")
+        }
+    }
+}
+
 impl From<i64> for Val {
     fn from(x: i64) -> Self {
         Val::Int(x)
