@@ -37,7 +37,7 @@ pub enum Val {
 
 
 impl Val {
-    pub fn try_get<K>(&self, k: K) -> Option<&Val>
+    pub fn get<K>(&self, k: K) -> Option<&Val>
     where
         K: Into<Val>
     {
@@ -47,16 +47,7 @@ impl Val {
             None
         }
     }
-    pub fn get<K>(&self, k: K) -> &Val
-    where
-        K: Into<Val>
-    {
-        if let Val::Dict(d) = self {
-            d.get(&k.into()).unwrap()
-        } else {
-            panic!();
-        }
-    }
+
     pub fn insert<K, V>(&mut self, k: K, v: V)
     where
         K: Into<Val>,

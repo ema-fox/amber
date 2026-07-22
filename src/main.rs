@@ -35,12 +35,12 @@ enum Inst {
 }
 
 fn macro_expand(form: Val, env: &Env) -> Val {
-    if let Some(op) = form.try_get("op") {
+    if let Some(op) = form.get("op") {
         let op_str: String = format!("op-{}", String::try_from(op).unwrap());
         if let Some(mac) = deref(env, &op_str) {
-            call(&mac, form.try_get("args").unwrap().clone()).unwrap()
+            call(&mac, form.get("args").unwrap().clone()).unwrap()
         } else {
-            if let Some(Val::List(args)) = form.try_get("args") {
+            if let Some(Val::List(args)) = form.get("args") {
                 let mut form2 = form.clone();
                 form2.insert("args", args.iter().map(|arg| macro_expand(arg.clone(), env)).collect::<Vec<_>>());
                 form2
@@ -69,57 +69,52 @@ fn analyze_par(par: &Inst) -> (String, Vec<Inst>) {
     }
 }
 
-fn val_to_inst(x: &Val) -> Inst {
-    match x {
-        Val::Dict(y) => {
-            let op: String = y.get(&"op".into()).unwrap().clone().try_into().unwrap();
-            let op2: &str = &op;
-            match op2 {
-                "lit" => {
-                    Inst::Lit(y.get(&"val".into()).unwrap().clone())
-                },
-                "bind" => {
-                    let args: Vec<Val> = y.get(&"args".into()).unwrap().clone().try_into().unwrap();
-                    Inst::Bind(args[0].get("name").try_into().unwrap(),
-                               Box::new(val_to_inst(&args[1])))
-                },
-                "list" => {
-                    let args: Vec<Val> = y.get(&"args".into()).unwrap().clone().try_into().unwrap();
-                    Inst::List(args.iter().map(val_to_inst).collect())
-                },
-                "dict" => {
-                    let args: Vec<Val> = y.get(&"args".into()).unwrap().clone().try_into().unwrap();
-                    Inst::Dict(args.iter().map(val_to_inst).collect())
-                },
-                "call" => {
-                    let args: Vec<Val> = y.get(&"args".into()).unwrap().clone().try_into().unwrap();
-                    Inst::Call(Box::new(val_to_inst(&args[0])), Box::new(val_to_inst(&args[1])))
-                },
-                "deref" => {
-                    Inst::Deref(y.get(&"name".into()).unwrap().clone().try_into().unwrap())
-                },
-                "if" => {
-                    let args: Vec<Val> = y.get(&"args".into()).unwrap().clone().try_into().unwrap();
-                    Inst::If(Box::new(val_to_inst(&args[0])),
-                             Box::new(val_to_inst(&args[1])),
-                             Box::new(val_to_inst(&args[2])))
-                },
-                "fn" => {
-                    let args: Vec<Val> = y.get(&"args".into()).unwrap().clone().try_into().unwrap();
-                    if let [par, body @ .., tail] = args.iter().map(val_to_inst).collect::<Vec<_>>().as_slice() {
-                        let mut body_vec = vec![];
-                        let (par_name, mut destructuring_body) = analyze_par(par);
-                        body_vec.append(&mut destructuring_body);
-                        body_vec.append(&mut body.into());
-                        Inst::Fn(par_name.to_string(), body_vec, Box::new(tail.clone()))
-                    } else {
-                        panic!();
-                    }
-                }
-                _ => panic!("Unknown op: {}", op2)
+fn val_to_inst(y: &Val) -> Inst {
+    let op: String = y.get("op").unwrap().clone().try_into().unwrap();
+    let op2: &str = &op;
+    match op2 {
+        "lit" => {
+            Inst::Lit(y.get("val").unwrap().clone())
+        },
+        "bind" => {
+            let args: Vec<Val> = y.get("args").unwrap().clone().try_into().unwrap();
+            Inst::Bind(args[0].get("name").unwrap().try_into().unwrap(),
+                       Box::new(val_to_inst(&args[1])))
+        },
+        "list" => {
+            let args: Vec<Val> = y.get("args").unwrap().clone().try_into().unwrap();
+            Inst::List(args.iter().map(val_to_inst).collect())
+        },
+        "dict" => {
+            let args: Vec<Val> = y.get("args").unwrap().clone().try_into().unwrap();
+            Inst::Dict(args.iter().map(val_to_inst).collect())
+        },
+        "call" => {
+            let args: Vec<Val> = y.get("args").unwrap().clone().try_into().unwrap();
+            Inst::Call(Box::new(val_to_inst(&args[0])), Box::new(val_to_inst(&args[1])))
+        },
+        "deref" => {
+            Inst::Deref(y.get("name").unwrap().clone().try_into().unwrap())
+        },
+        "if" => {
+            let args: Vec<Val> = y.get("args").unwrap().clone().try_into().unwrap();
+            Inst::If(Box::new(val_to_inst(&args[0])),
+                     Box::new(val_to_inst(&args[1])),
+                     Box::new(val_to_inst(&args[2])))
+        },
+        "fn" => {
+            let args: Vec<Val> = y.get("args").unwrap().clone().try_into().unwrap();
+            if let [par, body @ .., tail] = args.iter().map(val_to_inst).collect::<Vec<_>>().as_slice() {
+                let mut body_vec = vec![];
+                let (par_name, mut destructuring_body) = analyze_par(par);
+                body_vec.append(&mut destructuring_body);
+                body_vec.append(&mut body.into());
+                Inst::Fn(par_name.to_string(), body_vec, Box::new(tail.clone()))
+            } else {
+                panic!();
             }
         },
-        _ => panic!()
+        _ => panic!("Unknown op: {}", op2)
     }
 }
 
