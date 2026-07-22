@@ -1,5 +1,4 @@
 use std::rc::Rc;
-use std::collections::HashMap;
 use std::cell::OnceCell;
 use std::io::{self, Write};
 
@@ -8,7 +7,7 @@ use im;
 use crate::val::{Val, AFn};
 
 // TODO reconsider where to define these types
-pub type Env = HashMap<String, Val>;
+pub type Env = im::HashMap<Val, Val>;
 pub type YRes = Result<Val, Val>;
 
 pub fn call(x: &Val, args: Val) -> YRes {
@@ -169,6 +168,7 @@ fn print(xs: Vec<Val>) {
         match x {
             Val::Str(s) => print!("{}", s),
             Val::Int(x) => print!("{}", x),
+            Val::Dict(x) => print!("{:?}", x),
             _ => panic!()
         }
     }
@@ -240,5 +240,5 @@ pub fn get() -> Env {
         ("say", say as fn(Vec<Val>) -> YRes),
         ("ask", ask as fn(Vec<Val>) -> YRes),
         ("placeholder-fn", placeholder_fn as fn(Vec<Val>) -> YRes),
-    ].iter().map(|(name, f)| (name.to_string(), Val::Fn(wrap_list_arg(f)))).collect()
+    ].iter().map(|(name, f)| ((*name).into(), Val::Fn(wrap_list_arg(f)))).collect()
 }

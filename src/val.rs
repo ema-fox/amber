@@ -97,6 +97,18 @@ impl TryFrom<Val> for Vec<Val> {
     }
 }
 
+impl TryFrom<Val> for im::HashMap<Val, Val> {
+    type Error = &'static str;
+
+    fn try_from(v: Val) -> Result<Self, Self::Error> {
+        if let Val::Dict(x) = v {
+            Ok(x)
+        } else {
+            Err("Not a Val::Dict")
+        }
+    }
+}
+
 impl<T> TryFrom<Val> for Vec<T> where T: TryFrom<Val, Error = &'static str> {
     type Error = &'static str;
 
