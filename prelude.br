@@ -7,4 +7,7 @@ inc: {fn [x] (+ x 1)}
 
 merge: {fn [d0 d1] (merge-with {fn [a b] b} d0 d1)}
 
-fibonacci: {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}}
+fib-place: (placeholder-fn)
+fibonacci: (nth fib-place 0)
+((nth fib-place 1)
+  {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}})

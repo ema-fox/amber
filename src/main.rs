@@ -1,5 +1,4 @@
 use std::rc::Rc;
-use std::cell::OnceCell;
 use std::fs::read_to_string;
 use std::env;
 
@@ -37,7 +36,7 @@ enum Inst {
 fn macro_expand(form: Val, env: &Env) -> Val {
     if let Some(op) = form.get("op") {
         let op_str: String = format!("op-{}", String::try_from(op).unwrap());
-        if let Some(mac) = deref(env, &op_str) {
+        if let Some(mac) = env.get(&op_str) {
             call(&mac, form.get("args").unwrap().clone()).unwrap()
         } else {
             if let Some(Val::List(args)) = form.get("args") {
@@ -121,8 +120,7 @@ fn val_to_inst(y: &Val) -> Inst {
 fn eval_body(insts: &Vec<Inst>, env: &mut Env) {
     for inst in insts {
         if let Inst::Bind(binding_name, inner_inst) = inst {
-            env.insert(binding_name.to_string(), Rc::new(OnceCell::new()));
-            env.get(binding_name).unwrap().set(eval(&inner_inst, &env).unwrap()).unwrap();
+            env.insert(binding_name.to_string(), eval(&inner_inst, &env).unwrap());
         } else {
             eval(&inst, &env).unwrap();
         }
@@ -138,18 +136,11 @@ fn eval_vals(vinsts: &Vec<Val>, env: &mut Env) {
     for vinst in vinsts {
         let inst = val_to_inst(&macro_expand(vinst.clone(), env));
         if let Inst::Bind(binding_name, inner_inst) = inst {
-            env.insert(binding_name.to_string(), Rc::new(OnceCell::new()));
-            env.get(&binding_name).unwrap().set(eval(&inner_inst, &env).unwrap()).unwrap();
+            env.insert(binding_name.to_string(), eval(&inner_inst, &env).unwrap());
         } else {
             eval(&inst, &env).unwrap();
         }
     }
-}
-
-fn deref(env: &Env, x: &str) -> Option<Val> {
-        env.get(x).map(|y| {
-            y.get().expect(&format!("{} not initialized", x)).clone()
-        })
 }
 
 fn eval_dict(insts: &Vec<Inst>, env: &Env) -> im::HashMap<Val, Val> {
@@ -168,7 +159,7 @@ fn eval_dict(insts: &Vec<Inst>, env: &Env) -> im::HashMap<Val, Val> {
 fn eval(inst: &Inst, env: &Env) -> YRes {
     match inst {
         Inst::Lit(x) => Ok(x.clone()),
-        Inst::Deref(x) => Ok(deref(env, x).expect(&format!("no {} in env", x))),
+        Inst::Deref(x) => env.get(x).cloned().ok_or(format!("no {} in env", x).into()),
         Inst::List(xs) => Ok(Val::List(xs.iter().map(|x| eval(x, env).unwrap()).collect())),
         Inst::Dict(xs) => Ok(Val::Dict(eval_dict(xs, env))),
         Inst::Call(finst, arginst) => {
@@ -188,7 +179,7 @@ fn eval(inst: &Inst, env: &Env) -> YRes {
             let par_name = par_name.clone();
             Ok(Val::Fn(AFn(Rc::new(move |arg: Val| {
                 let mut env2 = env.clone();
-                env2.insert(par_name.to_string(), Rc::new(arg.into()));
+                env2.insert(par_name.to_string(), arg);
                 eval_body(&body, &mut env2);
                 eval(&tail, &env2)
             }))))

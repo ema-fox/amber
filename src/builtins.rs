@@ -8,7 +8,7 @@ use im;
 use crate::val::{Val, AFn};
 
 // TODO reconsider where to define these types
-pub type Env = HashMap<String, Rc<OnceCell<Val>>>;
+pub type Env = HashMap<String, Val>;
 pub type YRes = Result<Val, Val>;
 
 pub fn call(x: &Val, args: Val) -> YRes {
@@ -190,6 +190,29 @@ fn ask(xs: Vec<Val>) -> YRes {
     Ok(Val::Str(res.trim_end_matches(&['\r', '\n'][..]).to_string()))
 }
 
+fn placeholder_fn(_xs: Vec<Val>) -> YRes {
+    /*
+    TODO this is a plumbing function, the porcelain will be something like:
+    {recursive
+      foo: {fn ...}
+      bar: {fn ...}}
+    */
+    let place: Rc<OnceCell<AFn>> = Rc::new(OnceCell::new());
+    let place2 = place.clone();
+    Ok(vec![
+        Val::Fn(AFn(Rc::new(move |arg: Val| place.get().unwrap().0(arg)))),
+        Val::Fn(AFn(Rc::new(move |arg: Val| {
+            let args: Vec<Val> = arg.try_into().unwrap();
+            if let Val::Fn(f) = args[0].clone() {
+                place2.set(f).unwrap();
+            } else {
+                panic!();
+            }
+            Ok(0.into()) // TODO think about return value
+        })))
+    ].into())
+}
+
 fn wrap_list_arg(f: &'static fn(Vec<Val>) -> YRes) -> AFn {
     AFn(Rc::new(|arg: Val| {
         match arg {
@@ -216,5 +239,6 @@ pub fn get() -> Env {
         ("negate", negate as fn(Vec<Val>) -> YRes),
         ("say", say as fn(Vec<Val>) -> YRes),
         ("ask", ask as fn(Vec<Val>) -> YRes),
-    ].iter().map(|(name, f)| (name.to_string(), Rc::new(OnceCell::from(Val::Fn(wrap_list_arg(f)))))).collect()
+        ("placeholder-fn", placeholder_fn as fn(Vec<Val>) -> YRes),
+    ].iter().map(|(name, f)| (name.to_string(), Val::Fn(wrap_list_arg(f)))).collect()
 }

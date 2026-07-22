@@ -115,9 +115,15 @@ impl From<i64> for Val {
     }
 }
 
+impl From<String> for Val {
+    fn from(s: String) -> Self {
+        Val::Str(s)
+    }
+}
+
 impl From<&str> for Val {
     fn from(s: &str) -> Self {
-        Val::Str(s.to_string())
+        s.to_string().into()
     }
 }
 
