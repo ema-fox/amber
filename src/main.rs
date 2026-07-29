@@ -41,6 +41,35 @@ fn macro_expand(form: Val, env: &Env) -> Val {
     } else {form}
 }
 
+fn bind_macro_expand(form: Val, env: &Env) -> Vec<Val> {
+    match form.get("op") {
+        Some(Val::Str(op)) if op == "bind" => {
+            let dest = &form.get("args").unwrap()[0];
+            let dest_op_str = format!("bind-op-{}", String::try_from(dest.get("op").unwrap()).unwrap());
+            if dest_op_str == "bind-op-deref" {
+                vec![form]
+            } else if let Some(mac) = env.get(&dest_op_str.clone().into()) {
+                let foo = call(&mac, dest.get("args").unwrap().clone()).unwrap();
+                let mut res = vec![
+                    parse::create_inst("bind", vec![
+                        Val::Dict(im::HashMap::from(vec![
+                            ("op".into(), "deref".into()),
+                            ("name".into(), foo.get("bind").unwrap().clone())
+                        ])),
+                        form.get("args").unwrap()[1].clone()
+                    ])
+                ];
+                // TODO recursively apply `bind_macro_expand`
+                res.extend(Vec::try_from(foo.get("ops").unwrap().clone()).unwrap());
+                res
+            } else {
+                panic!("{} not defined", dest_op_str);
+            }
+        }
+        _ => vec![form]
+    }
+}
+
 fn analyze_par(par: &Inst) -> (String, Vec<Inst>) {
     match par {
         Inst::Deref(par_name) => (par_name.to_string(), vec![]),
@@ -138,14 +167,16 @@ fn eval_vals(vinsts: &Vec<Val>, env: &Env) -> Env {
     let mut env2 = env.clone();
     let mut result_env = im::HashMap::new();
     for vinst in vinsts {
-        let inst = val_to_inst(&macro_expand(vinst.clone(), &env2));
-        if let Inst::Bind(binding_name, inner_inst) = inst {
-            let name = Val::from(binding_name.clone());
-            let result = eval(&inner_inst, &env2).unwrap();
-            env2.insert(name.clone(), result.clone());
-            result_env.insert(name, result);
-        } else {
-            eval(&inst, &env2).unwrap();
+        for vinst2 in bind_macro_expand(macro_expand(vinst.clone(), &env2), &env2) {
+            let inst = val_to_inst(&vinst2);
+            if let Inst::Bind(binding_name, inner_inst) = inst {
+                let name = Val::from(binding_name.clone());
+                let result = eval(&inner_inst, &env2).unwrap();
+                env2.insert(name.clone(), result.clone());
+                result_env.insert(name, result);
+            } else {
+                eval(&inst, &env2).unwrap();
+            }
         }
     }
     result_env

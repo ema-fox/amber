@@ -7,7 +7,16 @@ inc: {fn [x] (+ x 1)}
 
 merge: {fn [d0 d1] (merge-with {fn [a b] b} d0 d1)}
 
-fib-place: (placeholder-fn)
-fibonacci: (nth fib-place 0)
-((nth fib-place 1)
+bind-op-list: {fn args
+  list-name: (gensym "list")
+  {dict
+   bind: list-name
+   ops: (map-indexed args
+                     {fn arg-and-i
+                       arg: (nth arg-and-i 0)
+                       i: (nth arg-and-i 1)
+                       {qq {uq arg}: (nth {uq {dict op: "deref" name: list-name}} {uq {dict op: "lit" val: i}})}})}}
+
+[fibonacci define-fibonacci!]: (placeholder-fn)
+(define-fibonacci!
   {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}})

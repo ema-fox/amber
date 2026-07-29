@@ -59,8 +59,8 @@ fn pbind(inp: &str) -> IResult<&str, Val> {
         |(name, _, body)| create_inst("bind", vec![name, body])).parse(inp)
 }
 
-
-fn create_inst(op: &str, args: Vec<Val>) -> Val {
+// TODO find a better place for this
+pub fn create_inst(op: &str, args: Vec<Val>) -> Val {
     Val::Dict(im::HashMap::from(vec![
         ("op".into(), op.into()),
         ("args".into(), args.into())
