@@ -61,6 +61,18 @@ impl Val {
     }
 }
 
+impl std::ops::Index<usize> for Val {
+    type Output = Val;
+
+    fn index(&self, index: usize) -> &Val {
+        if let Val::List(xs) = self {
+            &xs[index]
+        } else {
+            panic!();
+        }
+    }
+}
+
 impl TryFrom<&Val> for String {
     type Error = &'static str;
 
@@ -121,9 +133,21 @@ impl<T> TryFrom<Val> for Vec<T> where T: TryFrom<Val, Error = &'static str> {
     }
 }
 
+impl From<i32> for Val {
+    fn from(x: i32) -> Self {
+        Val::Int(x as i64)
+    }
+}
+
 impl From<i64> for Val {
     fn from(x: i64) -> Self {
         Val::Int(x)
+    }
+}
+
+impl From<usize> for Val {
+    fn from(x: usize) -> Self {
+        Val::Int(x as i64)
     }
 }
 
