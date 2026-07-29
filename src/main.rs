@@ -22,7 +22,8 @@ enum Inst {
     Call(Box<Inst>, Box<Inst>),
     If(Box<Inst>, Box<Inst>, Box<Inst>),
     Fn(String, Vec<Inst>, Box<Inst>),
-    Module(Vec<Val>)
+    Module(Vec<Val>),
+    Quasiquote(Val)
 }
 
 fn macro_expand(form: Val, env: &Env) -> Val {
@@ -61,7 +62,8 @@ fn analyze_par(par: &Inst) -> (String, Vec<Inst>) {
 }
 
 fn val_to_inst(y: &Val) -> Inst {
-    let op: String = y.get("op").unwrap().clone().try_into().unwrap();
+    // TODO performance y is always dbg formatted, not just when necessary
+    let op: String = y.get("op").expect(&format!("expected an instruction instead got {:?}", y)).clone().try_into().unwrap();
     let op2: &str = &op;
     match op2 {
         "lit" => {
@@ -108,6 +110,10 @@ fn val_to_inst(y: &Val) -> Inst {
         "module" => {
             let args: Vec<Val> = y.get("args").unwrap().clone().try_into().unwrap();
             Inst::Module(args)
+        },
+        "qq" => {
+            let args: Vec<Val> = y.get("args").unwrap().clone().try_into().unwrap();
+            Inst::Quasiquote(args[0].clone())
         },
         _ => panic!("Unknown op: {}", op2)
     }
@@ -158,6 +164,21 @@ fn eval_dict(insts: &Vec<Inst>, env: &Env) -> im::HashMap<Val, Val> {
     dict
 }
 
+fn quasiquote(form: &Val, env: &Env) -> Val {
+    // TODO performance quasiquote goes over the entire form but only the parts which contain unqotes need to be visited
+    match form.get("op") {
+        Some(Val::Str(op)) if op == "uq" => {
+            // TODO performance: eval_val does macro expansion
+            eval_val(&form.get("args").unwrap()[0], env).unwrap()
+        }
+        _ => match form {
+            Val::List(xs) => xs.iter().map(|x| quasiquote(x, env)).collect::<Vec<_>>().into(),
+            Val::Dict(d) => d.iter().map(|(k, v)| (quasiquote(k, env), quasiquote(v, env))).collect::<im::HashMap<_, _>>().into(),
+            _ => form.clone()
+        }
+    }
+}
+
 fn eval(inst: &Inst, env: &Env) -> YRes {
     match inst {
         Inst::Lit(x) => Ok(x.clone()),
@@ -189,6 +210,7 @@ fn eval(inst: &Inst, env: &Env) -> YRes {
         Inst::Module(body) => {
             Ok(Val::from(eval_vals(&body, &env)))
         }
+        Inst::Quasiquote(form) => Ok(quasiquote(form, env)),
         Inst::Bind(_, _) => panic!()
     }
 }
