@@ -29,7 +29,7 @@ fn macro_expand(form: Val, env: &Env) -> Val {
     if let Some(op) = form.get("op") {
         let op_str: String = format!("op-{}", String::try_from(op).unwrap());
         if let Some(mac) = env.get(&op_str.into()) {
-            call(&mac, form.get("args").unwrap().clone()).unwrap()
+            macro_expand(call(&mac, form.get("args").unwrap().clone()).unwrap(), env)
         } else {
             if let Some(Val::List(args)) = form.get("args") {
                 let mut form2 = form.clone();
