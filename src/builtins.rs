@@ -130,6 +130,17 @@ fn aget(xs: Vec<Val>) -> Result<Val, Val> {
     }
 }
 
+fn map_indexed(xs: Vec<Val>) -> YRes {
+    match xs.as_slice() {
+        [Val::List(xs), Val::Fn(AFn(f))] => {
+            Ok(Val::List(xs.iter().enumerate().map(|(i, x)| {
+                f(Val::List(vec![x.clone(), i.into()])).unwrap()
+            }).collect()))
+        },
+        _ => panic!()
+    }
+}
+
 fn merge_with(xs: Vec<Val>) -> YRes {
     match xs.as_slice() {
         [Val::Fn(AFn(f)), Val::Dict(d0), Val::Dict(d1)] => {
@@ -169,6 +180,7 @@ fn print(xs: Vec<Val>) {
             Val::Str(s) => print!("{}", s),
             Val::Int(x) => print!("{}", x),
             Val::Dict(x) => print!("{:?}", x),
+            Val::Fn(_) => print!("<Fn>"),
             _ => panic!()
         }
     }
@@ -213,6 +225,24 @@ fn placeholder_fn(_xs: Vec<Val>) -> YRes {
     ].into())
 }
 
+static mut COUNTER: usize = 0;
+
+fn get_uniq_number() -> usize {
+    // TODO make sure this is thread-safe
+    unsafe {
+        COUNTER += 1;
+        COUNTER
+    }
+}
+
+pub fn gensym(base: &str) -> String {
+    format!("{}{}", base, get_uniq_number())
+}
+
+fn gensym2(xs: Vec<Val>) -> YRes {
+    Ok(gensym(&String::try_from(xs[0].clone()).unwrap()).into())
+}
+
 fn wrap_list_arg(f: &'static fn(Vec<Val>) -> YRes) -> AFn {
     AFn(Rc::new(|arg: Val| {
         match arg {
@@ -234,11 +264,13 @@ pub fn get() -> Env {
         ("nth", nth as fn(Vec<Val>) -> YRes),
         ("++", concat as fn(Vec<Val>) -> YRes),
         ("get", aget as fn(Vec<Val>) -> YRes),
+        ("map-indexed", map_indexed as fn(Vec<Val>) -> YRes),
         ("merge-with", merge_with as fn(Vec<Val>) -> YRes),
         ("retain", retain as fn(Vec<Val>) -> YRes),
         ("negate", negate as fn(Vec<Val>) -> YRes),
         ("say", say as fn(Vec<Val>) -> YRes),
         ("ask", ask as fn(Vec<Val>) -> YRes),
         ("placeholder-fn", placeholder_fn as fn(Vec<Val>) -> YRes),
+        ("gensym", gensym2 as fn(Vec<Val>) -> YRes),
     ].iter().map(|(name, f)| ((*name).into(), Val::Fn(wrap_list_arg(f)))).collect()
 }

@@ -10,16 +10,7 @@ use val::{Val, AFn};
 mod parse;
 
 mod builtins;
-use builtins::{Env, YRes, call};
-
-static mut COUNTER: usize = 0;
-
-fn get_uniq_number() -> usize {
-    unsafe {
-        COUNTER += 1;
-        COUNTER
-    }
-}
+use builtins::{Env, YRes, call, gensym};
 
 #[derive(Debug, Clone)]
 enum Inst {
@@ -53,7 +44,7 @@ fn analyze_par(par: &Inst) -> (String, Vec<Inst>) {
     match par {
         Inst::Deref(par_name) => (par_name.to_string(), vec![]),
         Inst::List(xs) => {
-            let par_name = format!("list{}", get_uniq_number());
+            let par_name = gensym("list");
             let mut insts = vec![];
             for (i, x) in xs.iter().enumerate() {
                 let (entry_name, mut entry_insts) = analyze_par(x);
