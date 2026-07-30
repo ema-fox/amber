@@ -251,10 +251,7 @@ fn eval_str(code: &str, env: &Env) -> YRes {
 }
 
 fn eval_body_str(code: &str, env: &Env) -> Env {
-    let code2 = Val::from(im::HashMap::from(vec![
-        ("op", Val::from("module")),
-        ("args", Val::from(parse::insts(code).unwrap().1))
-        ]));
+    let code2 = parse::module(code).unwrap().1 ;
     im::HashMap::try_from(eval_val(&code2, &env).unwrap()).unwrap()
 }
 

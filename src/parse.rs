@@ -1,12 +1,20 @@
 use nom::{IResult, Parser};
 use nom::branch::{alt};
-use nom::character::complete::{char, one_of, alpha1, alphanumeric1, digit1, multispace0};
-use nom::combinator::{recognize, map, cut};
+use nom::character::complete::{char, one_of, alpha1, alphanumeric1, digit1, multispace1};
+use nom::combinator::{recognize, map, cut, all_consuming};
 use nom::multi::{many0_count, many0};
-use nom::sequence::{delimited, preceded};
+use nom::sequence::{delimited, preceded, terminated};
 use nom::bytes::{take_till};
 
 use crate::val::{Val};
+
+fn comment(inp: &str) -> IResult<&str, &str> {
+    recognize((char('#'), inst)).parse(inp)
+}
+
+fn space(inp: &str) -> IResult<&str, usize> {
+    many0_count(alt((comment, multispace1))).parse(inp)
+}
 
 fn sym_char(inp: &str) -> IResult<&str, &str> {
     recognize(one_of("=<+-/!")).parse(inp)
@@ -55,7 +63,7 @@ fn pderef(inp: &str) -> IResult<&str, Val> {
 }
 
 fn pbind(inp: &str) -> IResult<&str, Val> {
-    map((pinst_, (char(':'), multispace0), cut(inst)),
+    map((pinst_, (char(':'), space), cut(inst)),
         |(name, _, body)| create_inst("bind", vec![name, body])).parse(inp)
 }
 
@@ -93,6 +101,12 @@ pub fn inst(inp: &str) -> IResult<&str, Val> {
     alt((pbind, pinst_)).parse(inp)
 }
 
-pub fn insts(inp: &str) -> IResult<&str, Vec<Val>> {
-    many0(preceded(multispace0, inst)).parse(inp)
+fn insts(inp: &str) -> IResult<&str, Vec<Val>> {
+    terminated(many0(preceded(space, inst)), space).parse(inp)
+}
+
+pub fn module(inp: &str) -> IResult<&str, Val> {
+    map(all_consuming(insts),
+        |body| create_inst("module", body)
+    ).parse(inp)
 }
