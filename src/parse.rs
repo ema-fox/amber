@@ -9,7 +9,7 @@ use nom::bytes::{take_till};
 use crate::val::{Val};
 
 fn comment(inp: &str) -> IResult<&str, &str> {
-    recognize((char('#'), inst)).parse(inp)
+    recognize((char('#'), space, inst)).parse(inp)
 }
 
 fn space(inp: &str) -> IResult<&str, usize> {
