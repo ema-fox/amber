@@ -46,8 +46,8 @@ fn pstrlit(inp: &str) -> IResult<&str, Val> {
 
 fn plit(inp: &str) -> IResult<&str, Val> {
     map(alt((pnumlit, pstrlit)), |v: Val|
-        Val::Dict(im::HashMap::from(vec![
-            ("op".into(), "lit".into()),
+        Val::from(im::HashMap::from(vec![
+            (Val::from("op"), "lit".into()),
             ("val".into(), v)
         ]))
     ).parse(inp)
@@ -55,8 +55,8 @@ fn plit(inp: &str) -> IResult<&str, Val> {
 
 fn pderef(inp: &str) -> IResult<&str, Val> {
     map(psym, |v: &str|
-        Val::Dict(im::HashMap::from(vec![
-            ("op".into(), "deref".into()),
+        Val::from(im::HashMap::from(vec![
+            (Val::from("op"), Val::from("deref")),
             ("name".into(), v.into())
         ]))
     ).parse(inp)
@@ -69,8 +69,8 @@ fn pbind(inp: &str) -> IResult<&str, Val> {
 
 // TODO find a better place for this
 pub fn create_inst(op: &str, args: Vec<Val>) -> Val {
-    Val::Dict(im::HashMap::from(vec![
-        ("op".into(), op.into()),
+    Val::from(im::HashMap::from(vec![
+        (Val::from("op"), Val::from(op)),
         ("args".into(), args.into())
     ]))
 }

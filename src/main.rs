@@ -32,9 +32,9 @@ fn macro_expand(form: Val, env: &Env) -> Val {
         if let Some(mac) = env.get(&op_str.into()) {
             macro_expand(call(&mac, form.get("args").unwrap().clone()).unwrap(), env)
         } else {
-            if let Some(Val::List(args)) = form.get("args") {
+            if let Some(args) = form.get("args").map(|v| Vec::try_from(v.clone()).unwrap()) {
                 let mut form2 = form.clone();
-                form2.insert("args", args.iter().map(|arg| macro_expand(arg.clone(), env)).collect::<Vec<_>>());
+                form2.insert("args", args.iter().map(|arg: &Val| macro_expand(arg.clone(), env)).collect::<Vec<_>>());
                 form2
             } else {form}
         }
@@ -52,8 +52,8 @@ fn bind_macro_expand(form: Val, env: &Env) -> Vec<Val> {
                 let foo = call(&mac, dest.get("args").unwrap().clone()).unwrap();
                 let mut res = vec![
                     parse::create_inst("bind", vec![
-                        Val::Dict(im::HashMap::from(vec![
-                            ("op".into(), "deref".into()),
+                        Val::from(im::HashMap::from(vec![
+                            (Val::from("op"), Val::from("deref")),
                             ("name".into(), foo.get("bind").unwrap().clone())
                         ])),
                         form.get("args").unwrap()[1].clone()
@@ -100,7 +100,7 @@ fn val_to_inst(y: &Val) -> Inst {
         },
         "bind" => {
             let args: Vec<Val> = y.get("args").unwrap().clone().try_into().unwrap();
-            Inst::Bind(args[0].get("name").unwrap().try_into().unwrap(),
+            Inst::Bind(args[0].get("name").expect("bind op should have name").try_into().expect("name should be a string"),
                        Box::new(val_to_inst(&args[1])))
         },
         "list" => {
@@ -203,8 +203,12 @@ fn quasiquote(form: &Val, env: &Env) -> Val {
             eval_val(&form.get("args").unwrap()[0], env).unwrap()
         }
         _ => match form {
-            Val::List(xs) => xs.iter().map(|x| quasiquote(x, env)).collect::<Vec<_>>().into(),
-            Val::Dict(d) => d.iter().map(|(k, v)| (quasiquote(k, env), quasiquote(v, env))).collect::<im::HashMap<_, _>>().into(),
+            Val::Coll(xs, d) => {
+                Val::Coll(xs.map_indexed(|_, x| quasiquote(&x, env)),
+                          d.iter().map(|(k, v)| {
+                              (quasiquote(k, env), quasiquote(v, env))
+                          }).collect())
+            },
             _ => form.clone()
         }
     }
@@ -214,8 +218,8 @@ fn eval(inst: &Inst, env: &Env) -> YRes {
     match inst {
         Inst::Lit(x) => Ok(x.clone()),
         Inst::Deref(x) => env.get(&x.clone().into()).cloned().ok_or(format!("no {} in env", x).into()),
-        Inst::List(xs) => Ok(Val::List(xs.iter().map(|x| eval(x, env).unwrap()).collect())),
-        Inst::Dict(xs) => Ok(Val::Dict(eval_dict(xs, env))),
+        Inst::List(xs) => Ok(xs.iter().map(|x| eval(x, env).unwrap()).collect::<Vec<_>>().into()),
+        Inst::Dict(xs) => Ok(Val::from(eval_dict(xs, env))),
         Inst::Call(finst, arginst) => {
             call(&eval(finst, env).unwrap(),
                  eval(arginst, env).unwrap())

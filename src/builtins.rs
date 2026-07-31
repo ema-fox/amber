@@ -4,7 +4,7 @@ use std::io::{self, Write};
 
 use im;
 
-use crate::val::{Val, AFn};
+use crate::val::{Val, AFn, SparseVec};
 
 // TODO reconsider where to define these types
 pub type Env = im::HashMap<Val, Val>;
@@ -15,14 +15,10 @@ pub fn call(x: &Val, args: Val) -> YRes {
         Val::Fn(f) => {
             f.0(args)
         },
-        Val::Dict(d) => {
-            match args {
-                Val::List(ys) => {
-                    match ys.as_slice() {
-                        [y] => get_inner(&d, y),
-                        _ => panic!()
-                    }
-                },
+        Val::Coll(_, _) => {
+            let ys: Vec<_> = args.try_into().unwrap();
+            match ys.as_slice() {
+                [y] => x.get(y.clone()).cloned().ok_or(y.clone()),
                 _ => panic!()
             }
         },
@@ -93,26 +89,25 @@ fn div(xs: Vec<Val>) -> Result<Val, Val> {
 
 fn nth(xs: Vec<Val>) -> Result<Val, Val> {
     match xs.as_slice() {
-        [Val::List(ys), Val::Int(i)] => {
-            Ok(ys[*i as usize].clone())
+        [coll, i] => {
+            Ok(coll.get(i.clone()).unwrap().clone())
         },
         _ => panic!()
     }
 }
 
 fn concat(xs: Vec<Val>) -> YRes {
-    let mut res = vec![];
+    let mut res = SparseVec::new();
     for x in xs {
         match x {
-            // I don't understand why I can make ys mut here
-            // might fail in unexpected ways
-            Val::List(mut ys) => {
-                res.append(&mut ys);
-            },
-        _ => panic!()
+            Val::Coll(ys, d) => {
+                assert_eq!(d.len(), 0);
+                res = res + ys;
+            }
+            _ => panic!()
         }
     }
-    Ok(Val::List(res))
+    Ok(Val::Coll(res, im::HashMap::new()))
 }
 
 fn get_inner(dict: &im::HashMap<Val, Val>, key: &Val) -> YRes {
@@ -125,17 +120,17 @@ fn get_inner(dict: &im::HashMap<Val, Val>, key: &Val) -> YRes {
 
 fn aget(xs: Vec<Val>) -> Result<Val, Val> {
     match xs.as_slice() {
-        [Val::Dict(dict), key] => get_inner(dict, key),
+        [coll, key] => coll.get(key.clone()).cloned().ok_or(key.clone()),
         _ => panic!()
     }
 }
 
 fn map_indexed(xs: Vec<Val>) -> YRes {
     match xs.as_slice() {
-        [Val::List(xs), Val::Fn(AFn(f))] => {
-            Ok(Val::List(xs.iter().enumerate().map(|(i, x)| {
-                f(Val::List(vec![x.clone(), i.into()])).unwrap()
-            }).collect()))
+        [coll, Val::Fn(AFn(f))] => {
+            Ok(coll.clone().map_indexed(&|i: i64, entry: Val| {
+                f(Val::from(vec![entry.clone(), i.into()])).unwrap()
+            }))
         },
         _ => panic!()
     }
@@ -143,8 +138,10 @@ fn map_indexed(xs: Vec<Val>) -> YRes {
 
 fn merge_with(xs: Vec<Val>) -> YRes {
     match xs.as_slice() {
-        [Val::Fn(AFn(f)), Val::Dict(d0), Val::Dict(d1)] => {
-            Ok(Val::Dict(d0.clone().union_with(d1.clone(), |a, b| f(Val::List(vec![a, b])).unwrap())))
+        [Val::Fn(AFn(f)), c0, c1] => {
+            let d0: im::HashMap<Val, Val> = c0.clone().try_into().unwrap();
+            let d1: im::HashMap<Val, Val> = c1.clone().try_into().unwrap();
+            Ok(Val::from(d0.union_with(d1, |a, b| f(Val::from(vec![a, b])).unwrap())))
         },
         _ => panic!()
     }
@@ -152,10 +149,10 @@ fn merge_with(xs: Vec<Val>) -> YRes {
 
 fn retain(xs: Vec<Val>) -> YRes {
     match xs.as_slice() {
-        [Val::Dict(d), predicate] => {
-            let mut res = d.clone();
-            res.retain(|k, _v| call(predicate, Val::List(vec![k.clone()])).is_ok());
-            Ok(Val::Dict(res))
+        [d, predicate] => {
+            let mut res = im::HashMap::try_from(d.clone()).unwrap();
+            res.retain(|k, _v| call(predicate, Val::from(vec![k.clone()])).is_ok());
+            Ok(Val::from(res))
         },
         _ => panic!()
     }
@@ -179,9 +176,8 @@ fn print(xs: Vec<Val>) {
         match x {
             Val::Str(s) => print!("{}", s),
             Val::Int(x) => print!("{}", x),
-            Val::Dict(x) => print!("{:?}", x),
+            Val::Coll(xs, d) => print!("{:?}{:?}", xs, d),
             Val::Fn(_) => print!("<Fn>"),
-            _ => panic!()
         }
     }
 }
@@ -245,12 +241,7 @@ fn gensym2(xs: Vec<Val>) -> YRes {
 
 fn wrap_list_arg(f: &'static fn(Vec<Val>) -> YRes) -> AFn {
     AFn(Rc::new(|arg: Val| {
-        match arg {
-            Val::List(xs) => {
-                f(xs)
-            },
-            _ => panic!("{:?} is not a list", arg)
-        }
+        f(arg.try_into().unwrap())
     }))
 }
 

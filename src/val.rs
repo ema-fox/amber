@@ -1,6 +1,86 @@
 use std::rc::Rc;
 
-use im::HashMap;
+use im::{HashMap, Vector};
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SparseVec<T: Clone>(Vector<(i64, Vector<T>)>);
+
+impl<T: Clone> From<Vec<T>> for SparseVec<T> {
+    fn from(xs: Vec<T>) -> Self {
+        Self(vec![(0, xs.into())].into())
+    }
+}
+
+impl<T: Clone> TryFrom<SparseVec<T>> for Vec<T> {
+    type Error = &'static str;
+
+    fn try_from(v: SparseVec<T>) -> Result<Self, Self::Error> {
+        let chunks = v.0;
+        match chunks.len() {
+            0 => Ok(vec![]),
+            1 => match &chunks[0] {
+                (0, xs) => Ok(xs.iter().map(Clone::clone).collect()),
+                _ => Err("Not starting at 0")
+            },
+            _ => Err("Not contigous")
+        }
+    }
+}
+
+
+impl<T: Clone> std::ops::Index<i64> for SparseVec<T> {
+    type Output = T;
+
+    fn index(&self, index: i64) -> &T {
+        for (offset, chunk) in self.0.iter() {
+            if *offset <= index && index < offset + chunk.len() as i64 {
+                return &chunk[(index - offset) as usize];
+            }
+        }
+        panic!("Index out of bounds");
+    }
+}
+
+impl<T: Clone> std::ops::Add for SparseVec<T> {
+    type Output = SparseVec<T>;
+
+    fn add(mut self, mut other: Self) -> Self {
+        if let Some(a) = self.0.pop_back() {
+            if let Some(b) = other.0.pop_front() {
+                let offset_move = a.0 + a.1.len() as i64 - b.0;
+                let ab = (a.0, a.1 + b.1);
+                self.0.push_back(ab);
+                self.0.extend(other.0.iter().map(|(offset, chunk)| {
+                    (offset + offset_move, chunk.clone())
+                }));
+                self
+            } else {
+                self.0.push_back(a);
+                self
+            }
+        } else {
+            other
+        }
+    }
+}
+
+impl<T: Clone> SparseVec<T> {
+    pub fn new() -> Self {
+        Self(Vector::new())
+    }
+
+    pub fn count(self) -> usize {
+        self.0.iter().map(|(_, chunk)| chunk.len()).sum()
+    }
+
+    pub fn map_indexed<D: Clone>(&self, f: impl Fn(i64, T) -> D) -> SparseVec<D> {
+        SparseVec(self.0.iter().map(|(offset, chunk)| {
+            (*offset, chunk.iter().enumerate().map(|(i, entry)| {
+                f(offset + i as i64, entry.clone())
+            }).collect())
+        }).collect())
+    }
+}
 
 #[derive(Clone)]
 pub struct AFn(pub Rc<dyn Fn (Val) -> Result<Val, Val>>);
@@ -30,8 +110,7 @@ impl std::hash::Hash for AFn {
 pub enum Val {
     Int(i64),
     Str(String),
-    List(Vec<Val>),
-    Dict(HashMap<Val, Val>),
+    Coll(SparseVec<Val>, HashMap<Val, Val>),
     Fn(AFn)
 }
 
@@ -39,12 +118,18 @@ pub enum Val {
 impl Val {
     pub fn get<K>(&self, k: K) -> Option<&Val>
     where
-        K: Into<Val>
+        K: Into<Val>, Val: From<K>
     {
-        if let Val::Dict(d) = self {
-            d.get(&k.into())
-        } else {
-            None
+        let k2: Val = k.into();
+        match self {
+            Val::Coll(xs, d) => if let Val::Int(i) = k2 {
+                Some(&xs[i])
+            } else {
+                d.get(&k2)
+            }
+            _ =>{
+                None
+            }
         }
     }
 
@@ -53,8 +138,23 @@ impl Val {
         K: Into<Val>,
         V: Into<Val>
     {
-        if let Val::Dict(d) = self {
-            d.insert(k.into(), v.into());
+        if let Val::Coll(xs, d) = self {
+            let k2: Val = k.into();
+            if let Val::Int(i) = k2 {
+                todo!();
+            } else {
+                d.insert(k2, v.into());
+            }
+        } else {
+            panic!();
+        }
+    }
+
+    pub fn map_indexed(self, f: &dyn Fn(i64, Val) -> Val) -> Self {
+        if let Val::Coll(xs, d) = self {
+            // TODO also map over d
+            assert_eq!(d.len(), 0);
+            Val::Coll(xs.map_indexed(f), HashMap::new())
         } else {
             panic!();
         }
@@ -65,10 +165,23 @@ impl std::ops::Index<usize> for Val {
     type Output = Val;
 
     fn index(&self, index: usize) -> &Val {
-        if let Val::List(xs) = self {
-            &xs[index]
+        if let Val::Coll(xs, _) = self {
+            &xs[index.try_into().unwrap()]
         } else {
-            panic!();
+            panic!("Not a list");
+        }
+    }
+}
+
+impl TryFrom<Val> for i64 {
+    type Error = &'static str;
+
+    fn try_from(v: Val) -> Result<Self, Self::Error> {
+        if let Val::Int(i) = v {
+            Ok(i)
+        } else {
+            dbg!(&v);
+            Err("Not a Val::Int")
         }
     }
 }
@@ -101,10 +214,13 @@ impl TryFrom<Val> for Vec<Val> {
     type Error = &'static str;
 
     fn try_from(v: Val) -> Result<Self, Self::Error> {
-        if let Val::List(xs) = v {
-            Ok(xs)
+        if let Val::Coll(xs, d) = v {
+            if d.len() != 0 {
+                return Err("Collection has non-integer keys");
+            }
+            xs.try_into()
         } else {
-            Err("Not a Val::List")
+            Err("Not a Val::Coll")
         }
     }
 }
@@ -113,22 +229,13 @@ impl TryFrom<Val> for im::HashMap<Val, Val> {
     type Error = &'static str;
 
     fn try_from(v: Val) -> Result<Self, Self::Error> {
-        if let Val::Dict(x) = v {
-            Ok(x)
+        if let Val::Coll(xs, d) = v {
+            if xs.count() != 0 {
+                todo!();
+            }
+            Ok(d)
         } else {
-            Err("Not a Val::Dict")
-        }
-    }
-}
-
-impl<T> TryFrom<Val> for Vec<T> where T: TryFrom<Val, Error = &'static str> {
-    type Error = &'static str;
-
-    fn try_from(v: Val) -> Result<Self, Self::Error> {
-        if let Val::List(xs) = v {
-            xs.into_iter().map(T::try_from).collect()
-        } else {
-            Err("Not a Val::List")
+            Err("Not a Val::Coll")
         }
     }
 }
@@ -165,12 +272,12 @@ impl From<&str> for Val {
 
 impl<T> From<Vec<T>> for Val where Val: From<T> {
     fn from(xs: Vec<T>) -> Self {
-        Val::List(xs.into_iter().map(Self::from).collect())
+        Val::Coll(xs.into_iter().map(Self::from).collect::<Vec<_>>().into(), HashMap::new())
     }
 }
 
 impl<K, V> From<HashMap<K, V>> for Val where Val: From<K> + From<V>, K: Clone, V: Clone {
     fn from(m: HashMap<K, V>) -> Self {
-        Val::Dict(m.iter().map(|(k, v)| (Self::from(k.clone()), Val::from(v.clone()))).collect())
+        Val::Coll(SparseVec::new(), m.iter().map(|(k, v)| (Self::from(k.clone()), Val::from(v.clone()))).collect())
     }
 }
