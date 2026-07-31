@@ -18,7 +18,7 @@ pub fn call(x: &Val, args: Val) -> YRes {
         Val::Coll(_, _) => {
             let ys: Vec<_> = args.try_into().unwrap();
             match ys.as_slice() {
-                [y] => x.get(y.clone()).cloned().ok_or(y.clone()),
+                [key] => x.get(key.clone()).cloned().ok_or(key.clone()),
                 _ => panic!()
             }
         },
@@ -87,15 +87,6 @@ fn div(xs: Vec<Val>) -> Result<Val, Val> {
     }
 }
 
-fn nth(xs: Vec<Val>) -> Result<Val, Val> {
-    match xs.as_slice() {
-        [coll, i] => {
-            Ok(coll.get(i.clone()).unwrap().clone())
-        },
-        _ => panic!()
-    }
-}
-
 fn concat(xs: Vec<Val>) -> YRes {
     let mut res = SparseVec::new();
     for x in xs {
@@ -108,21 +99,6 @@ fn concat(xs: Vec<Val>) -> YRes {
         }
     }
     Ok(Val::Coll(res, im::HashMap::new()))
-}
-
-fn get_inner(dict: &im::HashMap<Val, Val>, key: &Val) -> YRes {
-    if let Some(val) = dict.get(key) {
-        Ok(val.clone())
-    } else {
-        Err(key.clone())
-    }
-}
-
-fn aget(xs: Vec<Val>) -> Result<Val, Val> {
-    match xs.as_slice() {
-        [coll, key] => coll.get(key.clone()).cloned().ok_or(key.clone()),
-        _ => panic!()
-    }
 }
 
 fn map_indexed(xs: Vec<Val>) -> YRes {
@@ -252,9 +228,7 @@ pub fn get() -> Env {
         ("+", plus as fn(Vec<Val>) -> YRes),
         ("-", minus as fn(Vec<Val>) -> YRes),
         ("/", div as fn(Vec<Val>) -> YRes),
-        ("nth", nth as fn(Vec<Val>) -> YRes),
         ("++", concat as fn(Vec<Val>) -> YRes),
-        ("get", aget as fn(Vec<Val>) -> YRes),
         ("map-indexed", map_indexed as fn(Vec<Val>) -> YRes),
         ("merge-with", merge_with as fn(Vec<Val>) -> YRes),
         ("retain", retain as fn(Vec<Val>) -> YRes),

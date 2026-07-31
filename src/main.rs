@@ -79,9 +79,8 @@ fn analyze_par(par: &Inst) -> (String, Vec<Inst>) {
             for (i, x) in xs.iter().enumerate() {
                 let (entry_name, mut entry_insts) = analyze_par(x);
                 insts.push(Inst::Bind(entry_name.to_string(),
-                                   Box::new(Inst::Call(Box::new(Inst::Deref("nth".to_string())),
-                                                       Box::new(Inst::List(vec![Inst::Deref(par_name.clone()),
-                                                                                Inst::Lit(Val::Int(i as i64))]))))));
+                                   Box::new(Inst::Call(Box::new(Inst::Deref(par_name.clone())),
+                                                       Box::new(Inst::List(vec![Inst::Lit(Val::Int(i as i64))]))))));
                 insts.append(&mut entry_insts);
             }
             (par_name, insts)
@@ -274,7 +273,7 @@ fn main() {
         eval_str("\"this is a string inside of a string\"", &glob),
         Ok("this is a string inside of a string".into())
     );
-    assert_eq!(eval_str("(get {dict a: 4 b: 5} \"c\")", &glob), Err("c".into()));
+    assert_eq!(eval_str("({dict a: 4 b: 5} \"c\")", &glob), Err("c".into()));
     assert_eq!(
         eval_str("(merge {dict a: 4 b: 5} {dict a: 2 c: 3})", &glob),
         Ok(im::HashMap::from(vec![("c", 3), ("b", 5), ("a", 2)]).into())
