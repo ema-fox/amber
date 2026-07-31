@@ -148,14 +148,7 @@ fn negate(xs: Vec<Val>) -> YRes {
 }
 
 fn print(xs: Vec<Val>) {
-    for x in &xs {
-        match x {
-            Val::Str(s) => print!("{}", s),
-            Val::Int(x) => print!("{}", x),
-            Val::Coll(xs, d) => print!("{:?}{:?}", xs, d),
-            Val::Fn(_) => print!("<Fn>"),
-        }
-    }
+    print!("{}", xs.iter().map(Val::naked_repr).collect::<Vec<_>>().join(" "));
 }
 
 fn say(xs: Vec<Val>) -> YRes {

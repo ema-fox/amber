@@ -159,6 +159,38 @@ impl Val {
             panic!();
         }
     }
+
+    pub fn repr(&self) -> String {
+        match self {
+            Val::Str(s) => format!("\"{}\"", s), // TODO escaping
+            Val::Int(x) => format!("{}", x),
+            Val::Coll(xs, d) => {
+                let mut elements = vec![];
+                for (offset, chunk) in &xs.0 {
+                    if *offset != 0 {
+                        elements.push(format!("{}:", offset));
+                    }
+                    for entry in chunk {
+                        elements.push(entry.repr());
+                    }
+                }
+                for (k, v) in d {
+                    elements.push(format!("{}:", k.naked_repr()));
+                    elements.push(v.repr());
+                }
+                format!("[{}]", elements.join(" "))
+            },
+            Val::Fn(_) => format!("<Fn>"),
+        }
+    }
+
+    pub fn naked_repr(&self) -> String {
+        if let Val::Str(s) = self {
+            s.clone()
+        } else {
+            self.repr()
+        }
+    }
 }
 
 impl std::ops::Index<usize> for Val {
