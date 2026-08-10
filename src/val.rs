@@ -141,7 +141,7 @@ impl Val {
         if let Val::Coll(xs, d) = self {
             let k2: Val = k.into();
             if let Val::Int(i) = k2 {
-                todo!();
+                todo!("{:?}{:?}", xs, i);
             } else {
                 d.insert(k2, v.into());
             }
