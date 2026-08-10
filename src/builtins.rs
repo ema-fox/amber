@@ -148,6 +148,16 @@ fn negate(xs: Vec<Val>) -> YRes {
     }
 }
 
+fn rand_choice(xs: Vec<Val>) -> YRes {
+    match xs.as_slice() {
+        [coll] => {
+            use rand;
+            use rand::seq::IndexedRandom;
+            coll.values().into_iter().collect::<Vec<_>>().choose(&mut rand::rng()).cloned().ok_or("Empty coll".into())
+        },
+        _ => panic!()
+    }
+}
 
 fn str(xs: Vec<Val>) -> YRes {
     Ok(xs.iter().map(Val::naked_repr).collect::<Vec<_>>().join("").into())
@@ -250,6 +260,7 @@ pub fn get() -> Env {
         ("merge-with", merge_with as fn(Vec<Val>) -> YRes),
         ("retain", retain as fn(Vec<Val>) -> YRes),
         ("negate", negate as fn(Vec<Val>) -> YRes),
+        ("rand-choice", rand_choice as fn(Vec<Val>) -> YRes),
         ("str", str as fn(Vec<Val>) -> YRes),
         ("say", say as fn(Vec<Val>) -> YRes),
         ("ask", ask as fn(Vec<Val>) -> YRes),

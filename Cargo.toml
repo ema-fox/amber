@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 nom = "8.0"
 im = "15.1"
+rand = "0.10.2"

@@ -73,6 +73,10 @@ impl<T: Clone> SparseVec<T> {
         self.0.iter().map(|(_, chunk)| chunk.len()).sum()
     }
 
+    pub fn unsparse(&self) -> Vector<T> {
+        self.0.clone().into_iter().map(|(_, a)| a).reduce(|a, b| a + b).unwrap_or(Vector::new())
+    }
+
     pub fn map_indexed<D: Clone>(&self, f: impl Fn(i64, T) -> D) -> SparseVec<D> {
         SparseVec(self.0.iter().map(|(offset, chunk)| {
             (*offset, chunk.iter().enumerate().map(|(i, entry)| {
@@ -145,6 +149,15 @@ impl Val {
             } else {
                 d.insert(k2, v.into());
             }
+        } else {
+            panic!();
+        }
+    }
+    pub fn values(&self) -> Vector<Val> {
+        if let Val::Coll(xs, d) = self {
+            let mut res = xs.unsparse();
+            res.extend(d.values().cloned());
+            res
         } else {
             panic!();
         }
