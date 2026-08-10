@@ -147,6 +147,11 @@ fn negate(xs: Vec<Val>) -> YRes {
     }
 }
 
+
+fn str(xs: Vec<Val>) -> YRes {
+    Ok(xs.iter().map(Val::naked_repr).collect::<Vec<_>>().join("").into())
+}
+
 fn print(xs: Vec<Val>) {
     print!("{}", xs.iter().map(Val::naked_repr).collect::<Vec<_>>().join(" "));
 }
@@ -226,6 +231,7 @@ pub fn get() -> Env {
         ("merge-with", merge_with as fn(Vec<Val>) -> YRes),
         ("retain", retain as fn(Vec<Val>) -> YRes),
         ("negate", negate as fn(Vec<Val>) -> YRes),
+        ("str", str as fn(Vec<Val>) -> YRes),
         ("say", say as fn(Vec<Val>) -> YRes),
         ("ask", ask as fn(Vec<Val>) -> YRes),
         ("placeholder-fn", placeholder_fn as fn(Vec<Val>) -> YRes),
