@@ -69,7 +69,7 @@ impl<T: Clone> SparseVec<T> {
         Self(Vector::new())
     }
 
-    pub fn count(self) -> usize {
+    pub fn count(&self) -> usize {
         self.0.iter().map(|(_, chunk)| chunk.len()).sum()
     }
 
@@ -178,7 +178,12 @@ impl Val {
                     elements.push(format!("{}:", k.naked_repr()));
                     elements.push(v.repr());
                 }
-                format!("[{}]", elements.join(" "))
+                let body = elements.join(" ");
+                if xs.count() > 0 {
+                    format!("[{}]", body)
+                } else {
+                    format!("{{{}}}", body)
+                }
             },
             Val::Fn(_) => format!("<Fn>"),
         }

@@ -2,11 +2,12 @@ use nom::{IResult, Parser};
 use nom::branch::{alt};
 use nom::character::complete::{char, one_of, alpha1, alphanumeric1, digit1, multispace1};
 use nom::combinator::{recognize, map, cut, all_consuming};
-use nom::multi::{many0_count, many0};
+use nom::multi::{many0_count, many0, many1};
 use nom::sequence::{delimited, preceded, terminated};
 use nom::bytes::{take_till};
 
 use crate::val::{Val};
+use crate::create;
 
 fn comment(inp: &str) -> IResult<&str, &str> {
     recognize((char('#'), space, inst)).parse(inp)
@@ -45,51 +46,42 @@ fn pstrlit(inp: &str) -> IResult<&str, Val> {
 }
 
 fn plit(inp: &str) -> IResult<&str, Val> {
-    map(alt((pnumlit, pstrlit)), |v: Val|
-        Val::from(im::HashMap::from(vec![
-            (Val::from("op"), "lit".into()),
-            ("val".into(), v)
-        ]))
-    ).parse(inp)
+    map(alt((pnumlit, pstrlit)), create::lit).parse(inp)
 }
 
 fn pderef(inp: &str) -> IResult<&str, Val> {
-    map(psym, |v: &str|
-        Val::from(im::HashMap::from(vec![
-            (Val::from("op"), Val::from("deref")),
-            ("name".into(), v.into())
-        ]))
-    ).parse(inp)
+    map(psym, create::deref).parse(inp)
+}
+
+fn pdot(inp: &str) -> IResult<&str, Val> {
+    map((pinst_, many1(preceded((char('.'), space), cut(pinst_)))),
+        |(f, mut args)| {
+            let mut args2 = vec![f];
+            args2.append(&mut args);
+            create::inst("dot", args2)
+        }).parse(inp)
 }
 
 fn pbind(inp: &str) -> IResult<&str, Val> {
     map((pinst_, (char(':'), space), cut(inst)),
-        |(name, _, body)| create_inst("bind", vec![name, body])).parse(inp)
-}
-
-// TODO find a better place for this
-pub fn create_inst(op: &str, args: Vec<Val>) -> Val {
-    Val::from(im::HashMap::from(vec![
-        (Val::from("op"), Val::from(op)),
-        ("args".into(), args.into())
-    ]))
+        |(name, _, body)| create::inst("bind", vec![name, body])).parse(inp)
 }
 
 fn pbraceinst(inp: &str) -> IResult<&str, Val> {
     map(delimited(char('{'), (psym, insts), cut(char('}'))),
-        |(op, args): (&str, Vec<Val>)| create_inst(op, args)
+        |(op, args): (&str, Vec<Val>)| create::inst(op, args)
     ).parse(inp)
 }
 
 fn plistinst(inp: &str) -> IResult<&str, Val> {
     map(delimited(char('['), insts, char(']')),
-        |entries: Vec<Val>| create_inst("list", entries)
+        |entries: Vec<Val>| create::inst("list", entries)
     ).parse(inp)
 }
 
 fn pcallinst(inp: &str) -> IResult<&str, Val> {
     map(delimited(char('('), (inst, insts), char(')')),
-        |(f, args): (Val, Vec<Val>)| create_inst("call", vec![f, create_inst("list", args)])
+        |(f, args): (Val, Vec<Val>)| create::inst("call", vec![f, create::inst("list", args)])
     ).parse(inp)
 }
 
@@ -98,7 +90,8 @@ fn pinst_(inp: &str) -> IResult<&str, Val> {
 }
 
 pub fn inst(inp: &str) -> IResult<&str, Val> {
-    alt((pbind, pinst_)).parse(inp)
+    // TODO check that bind and dot work correctly together
+    alt((pbind, pdot, pinst_)).parse(inp)
 }
 
 fn insts(inp: &str) -> IResult<&str, Vec<Val>> {
@@ -107,6 +100,6 @@ fn insts(inp: &str) -> IResult<&str, Vec<Val>> {
 
 pub fn module(inp: &str) -> IResult<&str, Val> {
     map(all_consuming(insts),
-        |body| create_inst("module", body)
+        |body| create::inst("module", body)
     ).parse(inp)
 }

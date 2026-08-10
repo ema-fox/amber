@@ -7,6 +7,7 @@ use im;
 mod val;
 use val::{Val, AFn};
 
+mod create;
 mod parse;
 
 mod builtins;
@@ -51,11 +52,8 @@ fn bind_macro_expand(form: Val, env: &Env) -> Vec<Val> {
             } else if let Some(mac) = env.get(&dest_op_str.clone().into()) {
                 let foo = call(&mac, dest.get("args").unwrap().clone()).unwrap();
                 let mut res = vec![
-                    parse::create_inst("bind", vec![
-                        Val::from(im::HashMap::from(vec![
-                            (Val::from("op"), Val::from("deref")),
-                            ("name".into(), foo.get("bind").unwrap().clone())
-                        ])),
+                    create::inst("bind", vec![
+                        create::deref(foo.get("bind").unwrap().clone()),
                         form.get("args").unwrap()[1].clone()
                     ])
                 ];

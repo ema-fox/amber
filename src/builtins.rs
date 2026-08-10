@@ -5,6 +5,7 @@ use std::io::{self, Write};
 use im;
 
 use crate::val::{Val, AFn, SparseVec};
+use crate::create;
 
 // TODO reconsider where to define these types
 pub type Env = im::HashMap<Val, Val>;
@@ -19,7 +20,7 @@ pub fn call(x: &Val, args: Val) -> YRes {
             let ys: Vec<_> = args.try_into().unwrap();
             match ys.as_slice() {
                 [key] => x.get(key.clone()).cloned().ok_or(key.clone()),
-                _ => panic!()
+                _ => panic!("Coll only expects one arg when called")
             }
         },
         _ => panic!("Value is not callable") // TODO give more information about `x`
@@ -213,6 +214,24 @@ fn gensym2(xs: Vec<Val>) -> YRes {
     Ok(gensym(&String::try_from(xs[0].clone()).unwrap()).into())
 }
 
+fn name_to_lit(inst: Val) -> Val {
+    if String::try_from(inst.get("op").unwrap()).unwrap() == "deref" {
+        create::lit(inst.get("name").unwrap().clone())
+    } else {
+        inst
+    }
+}
+
+fn op_dot(xs: Vec<Val>) -> YRes {
+    let mut iter = xs.into_iter();
+    let mut res = iter.next().unwrap();
+    for foo in iter {
+        res = create::inst("call", vec![res,
+                                        create::inst("list", vec![name_to_lit(foo)])]);
+    }
+    Ok(res)
+}
+
 fn wrap_list_arg(f: &'static fn(Vec<Val>) -> YRes) -> AFn {
     AFn(Rc::new(|arg: Val| {
         f(arg.try_into().unwrap())
@@ -236,5 +255,6 @@ pub fn get() -> Env {
         ("ask", ask as fn(Vec<Val>) -> YRes),
         ("placeholder-fn", placeholder_fn as fn(Vec<Val>) -> YRes),
         ("gensym", gensym2 as fn(Vec<Val>) -> YRes),
+        ("op-dot", op_dot as fn(Vec<Val>) -> YRes),
     ].iter().map(|(name, f)| ((*name).into(), Val::Fn(wrap_list_arg(f)))).collect()
 }

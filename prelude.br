@@ -13,8 +13,8 @@ bind-op-list: {fn args
    bind: list-name
    ops: (map-indexed args
                      {fn arg-and-i
-                       arg: (arg-and-i 0)
-                       i: (arg-and-i 1)
+                       arg: arg-and-i.0
+                       i: arg-and-i.1
                        {qq {uq arg}: ({uq {dict op: "deref" name: list-name}} {uq {dict op: "lit" val: i}})}})}}
 
 [fibonacci define-fibonacci!]: (placeholder-fn)
