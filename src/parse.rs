@@ -53,18 +53,22 @@ fn pderef(inp: &str) -> IResult<&str, Val> {
     map(psym, create::deref).parse(inp)
 }
 
-fn pdot(inp: &str) -> IResult<&str, Val> {
-    map((pinst_, many1(preceded((char('.'), space), cut(pinst_)))),
-        |(f, mut args)| {
-            let mut args2 = vec![f];
-            args2.append(&mut args);
-            create::inst("dot", args2)
-        }).parse(inp)
+fn pdot(f: &Val) -> impl Fn(&str) -> IResult<&str, Val> {
+    |inp: &str| {
+        map(many1(preceded((char('.'), space), cut(pinst_))),
+            |mut args| {
+                let mut args2: Vec<Val> = vec![f.clone()];
+                args2.append(&mut args);
+                create::inst("dot", args2)
+            }).parse(inp)
+    }
 }
 
-fn pbind(inp: &str) -> IResult<&str, Val> {
-    map((pinst_, (char(':'), space), cut(inst)),
-        |(name, _, body)| create::inst("bind", vec![name, body])).parse(inp)
+fn pbind(name: &Val) -> impl Fn (&str) -> IResult<&str, Val> {
+    |inp: &str | {
+        map(((char(':'), space), cut(inst)),
+            |(_, body)| create::inst("bind", vec![name.clone(), body])).parse(inp)
+    }
 }
 
 fn pbraceinst(inp: &str) -> IResult<&str, Val> {
@@ -91,7 +95,9 @@ fn pinst_(inp: &str) -> IResult<&str, Val> {
 
 pub fn inst(inp: &str) -> IResult<&str, Val> {
     // TODO check that bind and dot work correctly together
-    alt((pbind, pdot, pinst_)).parse(inp)
+    // TODO make this less ugly
+    let (rest, inst) = pinst_.parse(inp)?;
+    alt((pbind(&inst), pdot(&inst))).parse(rest).or(Ok((rest, inst.clone())))
 }
 
 fn insts(inp: &str) -> IResult<&str, Vec<Val>> {
