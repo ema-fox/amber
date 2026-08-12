@@ -163,6 +163,11 @@ fn str(xs: Vec<Val>) -> YRes {
     Ok(xs.iter().map(Val::naked_repr).collect::<Vec<_>>().join("").into())
 }
 
+fn split(args: Val) -> YRes {
+    let (s, sep): (String, String) = arity2(args);
+    Ok(s.split(&sep).collect::<Vec<_>>().into())
+}
+
 fn print(xs: Vec<Val>) {
     print!("{}", xs.iter().map(Val::naked_repr).collect::<Vec<_>>().join(" "));
 }
@@ -248,8 +253,24 @@ fn wrap_list_arg(f: &'static fn(Vec<Val>) -> YRes) -> AFn {
     }))
 }
 
+fn wrapf(f: &'static fn(Val) -> YRes) -> AFn {
+    AFn(Rc::new(f))
+}
+
+use std::fmt::Debug;
+
+fn arity2<A, B>(v: Val) -> (A, B) where
+    A: TryFrom<Val>, <A as TryFrom<Val>>::Error: Debug,
+    B: TryFrom<Val>, <B as TryFrom<Val>>::Error: Debug {
+    let xs = Vec::try_from(v).unwrap();
+    match xs.as_slice() {
+        [a, b] => (a.clone().try_into().unwrap(), b.clone().try_into().unwrap()),
+        _ => panic!("Wrong arity, expected 2 got {}", xs.len())
+    }
+}
+
 pub fn get() -> Env {
-    [
+    let mut res: Env = [
         ("=", eq as fn(Vec<Val>) -> YRes),
         ("<", lt as fn(Vec<Val>) -> YRes),
         ("+", plus as fn(Vec<Val>) -> YRes),
@@ -267,5 +288,9 @@ pub fn get() -> Env {
         ("placeholder-fn", placeholder_fn as fn(Vec<Val>) -> YRes),
         ("gensym", gensym2 as fn(Vec<Val>) -> YRes),
         ("op-dot", op_dot as fn(Vec<Val>) -> YRes),
-    ].iter().map(|(name, f)| ((*name).into(), Val::Fn(wrap_list_arg(f)))).collect()
+    ].iter().map(|(name, f)| ((*name).into(), Val::Fn(wrap_list_arg(f)))).collect();
+    res.extend([
+        ("split", split as fn(Val) -> YRes)
+    ].iter().map(|(name, f)| (Val::from(*name), Val::Fn(wrapf(f)))));
+    res
 }
