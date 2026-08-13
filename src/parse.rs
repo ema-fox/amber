@@ -41,7 +41,7 @@ fn pstr(inp: &str) -> IResult<&str, &str> {
 
 fn pstrlit(inp: &str) -> IResult<&str, Val> {
     map(pstr, |v: &str|
-        Val::Str(v.to_string())
+        Val::Str(v.replace("\\n", "\n"))
     ).parse(inp)
 }
 
