@@ -188,6 +188,12 @@ fn ask(xs: Vec<Val>) -> YRes {
     Ok(Val::Str(res.trim_end_matches(&['\r', '\n'][..]).to_string()))
 }
 
+fn read_file(args: Val) -> YRes {
+    let path: String = arity1(args);
+    use std::fs::read_to_string;
+    read_to_string(path).map(Val::from).map_err(|e| format!("{}", e).into())
+}
+
 fn placeholder_fn(_xs: Vec<Val>) -> YRes {
     /*
     TODO this is a plumbing function, the porcelain will be something like:
@@ -259,6 +265,15 @@ fn wrapf(f: &'static fn(Val) -> YRes) -> AFn {
 
 use std::fmt::Debug;
 
+fn arity1<A>(v: Val) -> A where
+    A: TryFrom<Val>, <A as TryFrom<Val>>::Error: Debug {
+    let xs = Vec::try_from(v).unwrap();
+    match xs.as_slice() {
+        [a] => a.clone().try_into().unwrap(),
+        _ => panic!("Wrong arity, expected 1 got {}", xs.len())
+    }
+}
+
 fn arity2<A, B>(v: Val) -> (A, B) where
     A: TryFrom<Val>, <A as TryFrom<Val>>::Error: Debug,
     B: TryFrom<Val>, <B as TryFrom<Val>>::Error: Debug {
@@ -290,7 +305,8 @@ pub fn get() -> Env {
         ("op-dot", op_dot as fn(Vec<Val>) -> YRes),
     ].iter().map(|(name, f)| ((*name).into(), Val::Fn(wrap_list_arg(f)))).collect();
     res.extend([
-        ("split", split as fn(Val) -> YRes)
+        ("split", split as fn(Val) -> YRes),
+        ("read-file", read_file as fn(Val) -> YRes),
     ].iter().map(|(name, f)| (Val::from(*name), Val::Fn(wrapf(f)))));
     res
 }
