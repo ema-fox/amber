@@ -131,7 +131,7 @@ impl Val {
             } else {
                 d.get(&k2)
             }
-            _ =>{
+            _ => {
                 None
             }
         }
@@ -290,6 +290,13 @@ impl TryFrom<Val> for im::HashMap<Val, Val> {
     }
 }
 
+// TODO is this a good idea?
+impl From<&Val> for Val {
+    fn from(v: &Val) -> Self {
+        v.clone()
+    }
+}
+
 impl From<i32> for Val {
     fn from(x: i32) -> Self {
         Val::Int(x as i64)
@@ -328,6 +335,7 @@ impl<T> From<Vec<T>> for Val where Val: From<T> {
 
 impl<K, V> From<HashMap<K, V>> for Val where Val: From<K> + From<V>, K: Clone, V: Clone {
     fn from(m: HashMap<K, V>) -> Self {
+        // TODO put integer keys into sparseVec
         Val::Coll(SparseVec::new(), m.iter().map(|(k, v)| (Self::from(k.clone()), Val::from(v.clone()))).collect())
     }
 }
