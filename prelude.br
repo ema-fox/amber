@@ -17,6 +17,16 @@ bind-op-list: {fn args
                        i: arg-and-i.1
                        {qq {uq arg}: ({uq {dict op: "deref" name: list-name}} {uq {dict op: "lit" val: i}})}})}}
 
+genname: {fn [x] {dict op: "deref" name: (gensym x)}}
+
+op-or: {fn [a b]
+  a-name: (genname "a")
+  {qq {do
+        {uq a-name}: {as-result {uq a}}
+        {if {uq a-name}.ok {uq a-name}.ok {uq b}}}}}
+
+end-index: {fn [xs] (inc {or (last-index xs) -1})}
+
 [fibonacci define-fibonacci!]: (placeholder-fn)
 (define-fibonacci!
   {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}})

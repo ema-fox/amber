@@ -90,6 +90,11 @@ fn div(xs: Vec<Val>) -> Result<Val, Val> {
     }
 }
 
+fn range(args: Val) -> YRes {
+    let (from, to): (i64, i64) = arity2(args);
+    Ok(Val::Coll(SparseVec::range(from as usize, to as usize), im::HashMap::new()))
+}
+
 fn concat(xs: Vec<Val>) -> YRes {
     let mut res = SparseVec::new();
     for x in xs {
@@ -104,6 +109,21 @@ fn concat(xs: Vec<Val>) -> YRes {
     Ok(Val::Coll(res, im::HashMap::new()))
 }
 
+fn start_index(args: Val) -> YRes {
+    let coll: Val = arity1(args);
+    Ok(coll.start_index().into())
+}
+
+fn first_index(args: Val) -> YRes {
+    let coll: Val = arity1(args);
+    Ok(coll.first_index().into())
+}
+
+fn last_index(args: Val) -> YRes {
+    let coll: Val = arity1(args);
+    coll.last_index().map(Val::from).ok_or(Val::from("no last index"))
+}
+
 fn map_indexed(xs: Vec<Val>) -> YRes {
     match xs.as_slice() {
         [coll, Val::Fn(AFn(f))] => {
@@ -113,6 +133,11 @@ fn map_indexed(xs: Vec<Val>) -> YRes {
         },
         _ => panic!()
     }
+}
+
+fn reduce(args: Val) -> YRes {
+    let (coll, f): (Val, Val) = arity2(args);
+    Ok(coll.values().iter().cloned().reduce(|a, b| call(&f, Val::from(vec![a, b])).unwrap()).unwrap())
 }
 
 fn merge_with(xs: Vec<Val>) -> YRes {
@@ -312,6 +337,11 @@ pub fn get() -> Env {
     ].iter().map(|(name, f)| ((*name).into(), Val::Fn(wrap_list_arg(f)))).collect();
     res.extend([
         ("op-call-coll", op_call_coll as fn(Val) -> YRes),
+        ("range", range as fn(Val) -> YRes),
+        ("first-index", first_index as fn(Val) -> YRes),
+        ("start-index", start_index as fn(Val) -> YRes),
+        ("last-index", last_index as fn(Val) -> YRes),
+        ("reduce", reduce as fn(Val) -> YRes),
         ("split", split as fn(Val) -> YRes),
         ("read-file", read_file as fn(Val) -> YRes),
     ].iter().map(|(name, f)| (Val::from(*name), Val::Fn(wrapf(f)))));

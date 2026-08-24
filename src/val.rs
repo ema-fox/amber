@@ -70,6 +70,30 @@ impl Val {
             panic!();
         }
     }
+    pub fn first_index(&self) -> i64 {
+        if let Val::Coll(xs, _) = self {
+            xs.first_index().unwrap() as i64
+        } else {
+            panic!();
+        }
+    }
+
+    pub fn start_index(&self) -> i64 {
+        if let Val::Coll(xs, _) = self {
+            xs.start_index() as i64
+        } else {
+            panic!();
+        }
+    }
+
+    pub fn last_index(&self) -> Option<i64> {
+        if let Val::Coll(xs, _) = self {
+            xs.last_index().map(|i| i as i64)
+        } else {
+            panic!();
+        }
+    }
+
     pub fn values(&self) -> Vector<Val> {
         if let Val::Coll(xs, d) = self {
             let mut res: Vector<Val> = xs.unsparse().into_iter().cloned().collect();
