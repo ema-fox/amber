@@ -84,8 +84,8 @@ fn plistinst(inp: &str) -> IResult<&str, Val> {
 }
 
 fn pcallinst(inp: &str) -> IResult<&str, Val> {
-    map(delimited(char('('), (inst, insts), char(')')),
-        |(f, args): (Val, Vec<Val>)| create::inst("call", vec![f, create::inst("list", args)])
+    map(delimited(char('('), insts, char(')')),
+        |f_args: Vec<Val>| create::inst("call-coll", f_args)
     ).parse(inp)
 }
 

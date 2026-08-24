@@ -243,6 +243,12 @@ fn name_to_lit(inst: Val) -> Val {
     }
 }
 
+fn op_call_coll(args: Val) -> YRes {
+    let xs = Vec::try_from(args).unwrap();
+    Ok(create::inst("call", vec![xs[0].clone(),
+                              create::inst("list", xs[1..].to_vec())]))
+}
+
 fn op_dot(xs: Vec<Val>) -> YRes {
     let mut iter = xs.into_iter();
     let mut res = iter.next().unwrap();
@@ -305,6 +311,7 @@ pub fn get() -> Env {
         ("op-dot", op_dot as fn(Vec<Val>) -> YRes),
     ].iter().map(|(name, f)| ((*name).into(), Val::Fn(wrap_list_arg(f)))).collect();
     res.extend([
+        ("op-call-coll", op_call_coll as fn(Val) -> YRes),
         ("split", split as fn(Val) -> YRes),
         ("read-file", read_file as fn(Val) -> YRes),
     ].iter().map(|(name, f)| (Val::from(*name), Val::Fn(wrapf(f)))));
