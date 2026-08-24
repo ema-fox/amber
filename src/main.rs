@@ -83,13 +83,13 @@ fn analyze_par(par: &Inst) -> (String, Vec<Inst>) {
             }
             (par_name, insts)
         }
-        _ => todo!()
+        _ => todo!("{:?}", par)
     }
 }
 
 fn val_to_inst(y: &Val) -> Inst {
     // TODO performance y is always dbg formatted, not just when necessary
-    let op: String = y.get("op").expect(&format!("expected an instruction instead got {:?}", y)).clone().try_into().unwrap();
+    let op: String = y.get("op").expect(&format!("expected an instruction instead got {}", y.repr())).clone().try_into().unwrap();
     let op2: &str = &op;
     match op2 {
         "lit" => {
@@ -130,7 +130,7 @@ fn val_to_inst(y: &Val) -> Inst {
                 body_vec.append(&mut body.into());
                 Inst::Fn(par_name.to_string(), body_vec, Box::new(tail.clone()))
             } else {
-                panic!();
+                panic!("{:?}", args);
             }
         },
         "module" => {
