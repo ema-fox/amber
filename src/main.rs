@@ -31,7 +31,12 @@ enum Inst {
 fn macro_expand(form: Val, env: &Env) -> Val {
     if let Some(op) = form.get("op") {
         let op_str: String = format!("op-{}", String::try_from(op).unwrap());
-        if let Some(mac) = env.get(&op_str.into()) {
+        if op_str == "op-module" {
+            // don't recurse into modules here, module instruction does macro expansion itself.
+            // TODO check if we need to do something similar for qq
+            // TODO check if we can do this withouth this special case
+            form
+        } else if let Some(mac) = env.get(&op_str.into()) {
             macro_expand(call(&mac, form.get("args").unwrap().clone()).unwrap(), env)
         } else {
             if let Some(args) = form.get("args").map(|v| Vec::try_from(v.clone()).unwrap()) {
