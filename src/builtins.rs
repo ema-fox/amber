@@ -4,7 +4,9 @@ use std::io::{self, Write};
 
 use im;
 
-use crate::val::{Val, AFn, SparseVec};
+use crate::sparsevec::SparseVec;
+
+use crate::val::{Val, AFn};
 use crate::create;
 
 // TODO reconsider where to define these types
@@ -94,7 +96,7 @@ fn concat(xs: Vec<Val>) -> YRes {
         match x {
             Val::Coll(ys, d) => {
                 assert_eq!(d.len(), 0);
-                res = res + ys;
+                res.append(&ys);
             }
             _ => panic!()
         }
@@ -127,9 +129,7 @@ fn merge_with(xs: Vec<Val>) -> YRes {
 fn retain(xs: Vec<Val>) -> YRes {
     match xs.as_slice() {
         [d, predicate] => {
-            let mut res = im::HashMap::try_from(d.clone()).unwrap();
-            res.retain(|k, _v| call(predicate, Val::from(vec![k.clone()])).is_ok());
-            Ok(Val::from(res))
+            Ok(d.clone().retain(|k| call(predicate, Val::from(vec![k])).is_ok()))
         },
         _ => panic!()
     }

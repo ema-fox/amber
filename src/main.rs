@@ -3,6 +3,9 @@ use std::fs::read_to_string;
 use std::env;
 
 use im;
+use im::hashmap;
+
+mod sparsevec;
 
 mod val;
 use val::{Val, AFn};

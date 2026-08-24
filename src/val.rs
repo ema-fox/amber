@@ -1,90 +1,7 @@
 use std::rc::Rc;
 
 use im::{HashMap, Vector};
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SparseVec<T: Clone>(Vector<(i64, Vector<T>)>);
-
-impl<T: Clone> From<Vec<T>> for SparseVec<T> {
-    fn from(xs: Vec<T>) -> Self {
-        Self(vec![(0, xs.into())].into())
-    }
-}
-
-impl<T: Clone> TryFrom<SparseVec<T>> for Vec<T> {
-    type Error = &'static str;
-
-    fn try_from(v: SparseVec<T>) -> Result<Self, Self::Error> {
-        let chunks = v.0;
-        match chunks.len() {
-            0 => Ok(vec![]),
-            1 => match &chunks[0] {
-                (0, xs) => Ok(xs.iter().map(Clone::clone).collect()),
-                _ => Err("Not starting at 0")
-            },
-            _ => Err("Not contigous")
-        }
-    }
-}
-
-
-impl<T: Clone> std::ops::Index<i64> for SparseVec<T> {
-    type Output = T;
-
-    fn index(&self, index: i64) -> &T {
-        for (offset, chunk) in self.0.iter() {
-            if *offset <= index && index < offset + chunk.len() as i64 {
-                return &chunk[(index - offset) as usize];
-            }
-        }
-        panic!("Index out of bounds");
-    }
-}
-
-impl<T: Clone> std::ops::Add for SparseVec<T> {
-    type Output = SparseVec<T>;
-
-    fn add(mut self, mut other: Self) -> Self {
-        if let Some(a) = self.0.pop_back() {
-            if let Some(b) = other.0.pop_front() {
-                let offset_move = a.0 + a.1.len() as i64 - b.0;
-                let ab = (a.0, a.1 + b.1);
-                self.0.push_back(ab);
-                self.0.extend(other.0.iter().map(|(offset, chunk)| {
-                    (offset + offset_move, chunk.clone())
-                }));
-                self
-            } else {
-                self.0.push_back(a);
-                self
-            }
-        } else {
-            other
-        }
-    }
-}
-
-impl<T: Clone> SparseVec<T> {
-    pub fn new() -> Self {
-        Self(Vector::new())
-    }
-
-    pub fn count(&self) -> usize {
-        self.0.iter().map(|(_, chunk)| chunk.len()).sum()
-    }
-
-    pub fn unsparse(&self) -> Vector<T> {
-        self.0.clone().into_iter().map(|(_, a)| a).reduce(|a, b| a + b).unwrap_or(Vector::new())
-    }
-
-    pub fn map_indexed<D: Clone>(&self, f: impl Fn(i64, T) -> D) -> SparseVec<D> {
-        SparseVec(self.0.iter().map(|(offset, chunk)| {
-            (*offset, chunk.iter().enumerate().map(|(i, entry)| {
-                f(offset + i as i64, entry.clone())
-            }).collect())
-        }).collect())
-    }
-}
+use crate::sparsevec::SparseVec;
 
 #[derive(Clone)]
 pub struct AFn(pub Rc<dyn Fn (Val) -> Result<Val, Val>>);
@@ -127,7 +44,7 @@ impl Val {
         let k2: Val = k.into();
         match self {
             Val::Coll(xs, d) => if let Val::Int(i) = k2 {
-                Some(&xs[i])
+                xs.get(i as usize)
             } else {
                 d.get(&k2)
             }
@@ -155,7 +72,7 @@ impl Val {
     }
     pub fn values(&self) -> Vector<Val> {
         if let Val::Coll(xs, d) = self {
-            let mut res = xs.unsparse();
+            let mut res: Vector<Val> = xs.unsparse().into_iter().cloned().collect();
             res.extend(d.values().cloned());
             res
         } else {
@@ -167,7 +84,17 @@ impl Val {
         if let Val::Coll(xs, d) = self {
             // TODO also map over d
             assert_eq!(d.len(), 0);
-            Val::Coll(xs.map_indexed(f), HashMap::new())
+            Val::Coll(xs.map_indexed(|i, v| f(i as i64, v.clone())), HashMap::new())
+        } else {
+            panic!();
+        }
+    }
+
+    pub fn retain(self, f: impl Fn(Val) -> bool) -> Self {
+        if let Val::Coll(xs, d) = self {
+            let mut dres = d.clone();
+            dres.retain(|k, _v| f(k.clone()));
+            Val::Coll(xs.retain(|i| f(Val::from(i as i64))), dres)
         } else {
             panic!();
         }
@@ -179,13 +106,13 @@ impl Val {
             Val::Int(x) => format!("{}", x),
             Val::Coll(xs, d) => {
                 let mut elements = vec![];
-                for (offset, chunk) in &xs.0 {
-                    if *offset != 0 {
-                        elements.push(format!("{}:", offset));
+                let mut expected_i = 0;
+                for (i, v) in xs.entries() {
+                    if i != expected_i {
+                        elements.push(format!("{}:", i));
                     }
-                    for entry in chunk {
-                        elements.push(entry.repr());
-                    }
+                    elements.push(v.repr());
+                    expected_i = i + 1;
                 }
                 for (k, v) in d {
                     elements.push(format!("{}:", k.naked_repr()));
@@ -279,10 +206,8 @@ impl TryFrom<Val> for im::HashMap<Val, Val> {
     type Error = &'static str;
 
     fn try_from(v: Val) -> Result<Self, Self::Error> {
-        if let Val::Coll(xs, d) = v {
-            if xs.count() != 0 {
-                todo!();
-            }
+        if let Val::Coll(xs, mut d) = v {
+            d.extend(xs.entries().into_iter().map(|(i, v)| (Val::from(i), v)));
             Ok(d)
         } else {
             Err("Not a Val::Coll")
