@@ -21,6 +21,7 @@ enum Inst {
     List(Vec<Inst>),
     Dict(Vec<Inst>),
     Call(Box<Inst>, Box<Inst>),
+    AsResult(Box<Inst>),
     If(Box<Inst>, Box<Inst>, Box<Inst>),
     Fn(String, Vec<Inst>, Box<Inst>),
     Module(Vec<Val>),
@@ -115,6 +116,10 @@ fn val_to_inst(y: &Val) -> Inst {
         "deref" => {
             Inst::Deref(y.get("name").unwrap().clone().try_into().unwrap())
         },
+        "as-result" => {
+            let args: Vec<Val> = y.get("args").unwrap().clone().try_into().unwrap();
+            Inst::AsResult(Box::new(val_to_inst(&args[0])))
+        }
         "if" => {
             let args: Vec<Val> = y.get("args").unwrap().clone().try_into().unwrap();
             Inst::If(Box::new(val_to_inst(&args[0])),
@@ -221,6 +226,16 @@ fn eval(inst: &Inst, env: &Env) -> YRes {
             call(&eval(finst, env).unwrap(),
                  eval(arginst, env).unwrap())
         },
+        Inst::AsResult(cond_inst) => {
+            match eval(cond_inst, env) {
+                Ok(v) => Ok(Val::from(hashmap!{
+                    Val::from("ok") => v
+                })),
+                Err(v) => Ok(Val::from(hashmap!{
+                    Val::from("err") => v
+                }))
+            }
+        }
         Inst::If(cond_inst, then_inst, else_inst) => {
             match eval(cond_inst, env) {
                 Ok(_) => eval(then_inst, env),
