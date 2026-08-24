@@ -18,7 +18,7 @@ fn space(inp: &str) -> IResult<&str, usize> {
 }
 
 fn sym_char(inp: &str) -> IResult<&str, &str> {
-    recognize(one_of("=<+-/!")).parse(inp)
+    recognize(one_of("=<>_+-/!")).parse(inp)
 }
 
 fn psym(inp: &str) -> IResult<&str, &str> {
