@@ -1,7 +1,7 @@
 use nom::{IResult, Parser};
 use nom::branch::{alt};
 use nom::character::complete::{char, one_of, alpha1, alphanumeric1, digit1, multispace1};
-use nom::combinator::{recognize, map, cut, all_consuming};
+use nom::combinator::{recognize, map, cut, all_consuming, opt};
 use nom::multi::{many0_count, many0, many1};
 use nom::sequence::{delimited, preceded, terminated};
 use nom::bytes::{take_till};
@@ -26,7 +26,7 @@ fn psym(inp: &str) -> IResult<&str, &str> {
 }
 
 fn pnum(inp: &str) -> IResult<&str, &str> {
-    digit1.parse(inp)
+    recognize((opt(char('-')), digit1)).parse(inp)
 }
 
 fn pnumlit(inp: &str) -> IResult<&str, Val> {
