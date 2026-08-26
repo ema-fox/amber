@@ -124,6 +124,16 @@ impl Val {
         }
     }
 
+    pub fn bake(&self, f: impl Fn(Val) -> Option<Val>) -> Self {
+        if let Val::Coll(xs, d) = self {
+            Val::Coll(xs.bake(|i| f(Val::from(i as i64))),
+                      HashMap::from(d.keys().filter_map(|k| f(k.clone()).map(|x| (k.clone(), x)))
+                      .collect::<Vec<_>>()))
+        } else {
+            panic!();
+        }
+    }
+
     pub fn repr(&self) -> String {
         match self {
             Val::Str(s) => format!("\"{}\"", s), // TODO escaping

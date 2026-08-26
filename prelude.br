@@ -17,8 +17,10 @@ inc: {fn [x] (+ x 1)}
 
 merge: {fn [d0 d1] (merge-with {fn [a b] b} d0 d1)}
 
+as-deref: {fn [name] {dict op: "deref" name: name}}
+as-lit: {fn [val] {dict op: "lit" val: val}}
 
-genname: {fn [x] {dict op: "deref" name: (gensym x)}}
+genname: {fn [x] (as-deref (gensym x))}
 
 op-or: {fn [a b]
   a-name: (genname "a")
@@ -27,6 +29,26 @@ op-or: {fn [a b]
         {if {uq a-name}.ok {uq a-name}.ok {uq b}}}}}
 
 end-index: {fn [xs] (inc {or (last-index xs) -1})}
+
+slice: {fn [xs start end]
+  (++ [] (retain xs (range start end)))}
+
+bind-op-++: {fn [coll rest]
+  arg-name: (gensym "arg")
+  {dict
+   bind: arg-name
+   ops: [
+     {qq {uq coll}: {uq (as-deref arg-name)}}
+     {qq {uq rest}: (slice {uq (as-deref arg-name)}
+                           {uq (as-lit (end-index coll.args))}
+                           (end-index {uq (as-deref arg-name)}))}]}}
+
+mapf: {fn {++ [inner outer] xs}
+  {fn ys
+    {call outer (++ [{call inner ys}] xs)}}}
+
+map: {fn args
+  (bake {call mapf args} args.0)}
 
 [fibonacci define-fibonacci!]: (placeholder-fn)
 (define-fibonacci!

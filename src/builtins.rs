@@ -135,6 +135,11 @@ fn map_indexed(xs: Vec<Val>) -> YRes {
     }
 }
 
+fn bake(args: Val) -> YRes {
+    let (f, coll): (Val, Val) = arity2(args);
+    Ok(coll.bake(|k| call(&f, Val::from(vec![k])).ok()))
+}
+
 fn reduce(args: Val) -> YRes {
     let (coll, f): (Val, Val) = arity2(args);
     Ok(coll.values().iter().cloned().reduce(|a, b| call(&f, Val::from(vec![a, b])).unwrap()).unwrap())
@@ -341,6 +346,7 @@ pub fn get() -> Env {
         ("first-index", first_index as fn(Val) -> YRes),
         ("start-index", start_index as fn(Val) -> YRes),
         ("last-index", last_index as fn(Val) -> YRes),
+        ("bake", bake as fn(Val) -> YRes),
         ("reduce", reduce as fn(Val) -> YRes),
         ("split", split as fn(Val) -> YRes),
         ("read-file", read_file as fn(Val) -> YRes),

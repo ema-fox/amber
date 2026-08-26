@@ -214,6 +214,12 @@ impl<T> SparseVec<T> {
         }).collect())
     }
 
+    pub fn bake<D>(&self, f: impl Fn(usize) -> Option<D>) -> SparseVec<D> {
+        SparseVec::from_entries(self.entries().into_iter().filter_map(|(i, _)| {
+            f(i).map(|x| (i, x))
+        }).collect())
+    }
+
     fn add_level(&mut self) {
         let mut branch = [const {None}; BRANCH];
         branch[0] = Some(self.root.clone());

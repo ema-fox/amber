@@ -318,6 +318,10 @@ fn main() {
              &glob),
         Ok(6.into())
     );
+    assert_eq!(
+        eval_str("(map [1 2 3] + 2)", &glob),
+        Ok(vec![3, 4, 5].into())
+    );
 
     let args: Vec<String> = env::args().collect();
     if let [_, path] = args.as_slice() {
