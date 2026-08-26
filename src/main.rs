@@ -14,7 +14,7 @@ mod create;
 mod parse;
 
 mod builtins;
-use builtins::{Env, YRes, call, gensym};
+use builtins::{Env, YRes, call};
 
 #[derive(Debug, Clone)]
 enum Inst {
@@ -34,11 +34,19 @@ enum Inst {
 fn macro_expand(form: Val, env: &Env) -> Val {
     if let Some(op) = form.get("op") {
         let op_str: String = format!("op-{}", String::try_from(op).unwrap());
-        if op_str == "op-module" {
-            // don't recurse into modules here, module instruction does macro expansion itself.
-            // TODO check if we need to do something similar for qq
+        if op_str == "op-module" || op_str == "op-qq" {
+            // don't recurse into modules and qq here, module and qqinstruction does macro expansion itself.
             // TODO check if we can do this withouth this special case
             form
+        } else if op_str == "op-fn" {
+            let (bind, ops) = dest_macro_expand(form.get("args").unwrap().get(0).unwrap().clone(), env);
+            let args = Vec::try_from(form.get("args").unwrap().clone()).unwrap();
+            let mut args2 = vec![create::deref(bind)];
+            args2.extend(ops);
+            args2.extend(args[1..].iter().map(|arg: &Val| macro_expand(arg.clone(), env)));
+            let mut form2 = form.clone();
+            form2.insert("args", Val::from(args2));
+            form2
         } else if let Some(mac) = env.get(&op_str.into()) {
             macro_expand(call(&mac, form.get("args").unwrap().clone()).unwrap(), env)
         } else {
@@ -51,27 +59,32 @@ fn macro_expand(form: Val, env: &Env) -> Val {
     } else {form}
 }
 
+fn dest_macro_expand(dest: Val, env: &Env) -> (Val, Vec<Val>) {
+    let dest_op_str = format!("bind-op-{}", String::try_from(dest.get("op").unwrap()).unwrap());
+    if dest_op_str == "bind-op-deref" {
+        (dest.get("name").unwrap().clone(), vec![])
+    } else if let Some(mac) = env.get(&dest_op_str.clone().into()) {
+        let foo = call(&mac, dest.get("args").unwrap().clone()).unwrap();
+        (foo.get("bind").unwrap().clone(),
+         Vec::try_from(foo.get("ops").unwrap().clone()).unwrap()
+         .into_iter().flat_map(|form| bind_macro_expand(form, env)).collect())
+    } else {
+        panic!("{} not defined", dest_op_str);
+    }
+}
+
 fn bind_macro_expand(form: Val, env: &Env) -> Vec<Val> {
     match form.get("op") {
         Some(Val::Str(op)) if op == "bind" => {
-            let dest = &form.get("args").unwrap()[0];
-            let dest_op_str = format!("bind-op-{}", String::try_from(dest.get("op").unwrap()).unwrap());
-            if dest_op_str == "bind-op-deref" {
-                vec![form]
-            } else if let Some(mac) = env.get(&dest_op_str.clone().into()) {
-                let foo = call(&mac, dest.get("args").unwrap().clone()).unwrap();
-                let mut res = vec![
-                    create::inst("bind", vec![
-                        create::deref(foo.get("bind").unwrap().clone()),
-                        form.get("args").unwrap()[1].clone()
-                    ])
-                ];
-                // TODO recursively apply `bind_macro_expand`
-                res.extend(Vec::try_from(foo.get("ops").unwrap().clone()).unwrap());
-                res
-            } else {
-                panic!("{} not defined", dest_op_str);
-            }
+            let (bind, ops) = dest_macro_expand(form.get("args").unwrap()[0].clone(), env);
+            let mut res = vec![
+                create::inst("bind", vec![
+                    create::deref(bind),
+                    form.get("args").unwrap()[1].clone()
+                ])
+            ];
+            res.extend(ops);
+            res
         }
         _ => vec![form]
     }
@@ -80,19 +93,7 @@ fn bind_macro_expand(form: Val, env: &Env) -> Vec<Val> {
 fn analyze_par(par: &Inst) -> (String, Vec<Inst>) {
     match par {
         Inst::Deref(par_name) => (par_name.to_string(), vec![]),
-        Inst::List(xs) => {
-            let par_name = gensym("list");
-            let mut insts = vec![];
-            for (i, x) in xs.iter().enumerate() {
-                let (entry_name, mut entry_insts) = analyze_par(x);
-                insts.push(Inst::Bind(entry_name.to_string(),
-                                   Box::new(Inst::Call(Box::new(Inst::Deref(par_name.clone())),
-                                                       Box::new(Inst::List(vec![Inst::Lit(Val::Int(i as i64))]))))));
-                insts.append(&mut entry_insts);
-            }
-            (par_name, insts)
-        }
-        _ => todo!("{:?}", par)
+        _ => panic!("expected deref got {:?}", par)
     }
 }
 
@@ -265,7 +266,7 @@ fn eval(inst: &Inst, env: &Env) -> YRes {
         Inst::Module(body) => {
             Ok(Val::from(eval_vals(&body, &env)))
         }
-        Inst::Quasiquote(form) => Ok(quasiquote(form, env)),
+        Inst::Quasiquote(form) => Ok(macro_expand(quasiquote(form, env), env)),
         Inst::Bind(_, _) => panic!()
     }
 }
