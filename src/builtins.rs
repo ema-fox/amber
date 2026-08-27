@@ -289,6 +289,19 @@ fn op_dot(xs: Vec<Val>) -> YRes {
     Ok(res)
 }
 
+       fn bind_op_list(args: Val) -> YRes {
+           let args: Vec<Val> = Vec::try_from(args).unwrap();
+           let list_name = Val::from(gensym("list"));
+           Ok(Val::from(im::HashMap::from(vec![
+               ("bind", list_name.clone()),
+               ("ops", args.into_iter().enumerate().map(|(i, arg)| {
+                   create::inst("bind", vec![arg, create::inst("call-coll", vec![create::deref(list_name.clone()),
+                                                                                 create::lit(Val::from(i as i64))])])
+               })
+               .collect::<Vec<_>>().into())
+           ])))
+       }
+
 fn wrap_list_arg(f: &'static fn(Vec<Val>) -> YRes) -> AFn {
     AFn(Rc::new(|arg: Val| {
         f(arg.try_into().unwrap())
@@ -342,6 +355,7 @@ pub fn get() -> Env {
     ].iter().map(|(name, f)| ((*name).into(), Val::Fn(wrap_list_arg(f)))).collect();
     res.extend([
         ("op-call-coll", op_call_coll as fn(Val) -> YRes),
+        ("bind-op-list", bind_op_list as fn(Val) -> YRes),
         ("range", range as fn(Val) -> YRes),
         ("first-index", first_index as fn(Val) -> YRes),
         ("start-index", start_index as fn(Val) -> YRes),

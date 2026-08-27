@@ -80,7 +80,7 @@ fn bind_macro_expand(form: Val, env: &Env) -> Vec<Val> {
             let mut res = vec![
                 create::inst("bind", vec![
                     create::deref(bind),
-                    form.get("args").unwrap()[1].clone()
+                    macro_expand(form.get("args").unwrap()[1].clone(), env)
                 ])
             ];
             res.extend(ops);

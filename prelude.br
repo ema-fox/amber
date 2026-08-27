@@ -3,16 +3,6 @@ op-do: {fn body
    args: [{dict op: "fn" args: (++ [{dict op: "list" args: []}] body)}
           {dict op: "list" args: []}]}}
 
-bind-op-list: {fn args
-  list-name: (gensym "list")
-  {dict
-   bind: list-name
-   ops: (map-indexed args
-                     {fn arg-and-i
-                       arg: arg-and-i.0
-                       i: arg-and-i.1
-                       {qq {uq arg}: ({uq {dict op: "deref" name: list-name}} {uq {dict op: "lit" val: i}})}})}}
-
 inc: {fn [x] (+ x 1)}
 
 merge: {fn [d0 d1] (merge-with {fn [a b] b} d0 d1)}
