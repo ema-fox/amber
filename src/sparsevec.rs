@@ -198,12 +198,6 @@ impl<T> SparseVec<T> {
         self.entries().into_iter().map(|(_, x)| x).collect()
     }
 
-    pub fn map_indexed<D>(&self, f: impl Fn(usize, &T) -> D) -> SparseVec<D> {
-        SparseVec::from_entries(self.entries().into_iter().map(|(i, x)| {
-            (i, f(i, x))
-        }).collect())
-    }
-
     pub fn retain(&self, f: impl Fn(usize) -> bool) -> Self {
          SparseVec::from_entries_arc(self.entries_arc().into_iter().filter_map(|(i, x)| {
              if f(i) {

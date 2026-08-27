@@ -104,16 +104,6 @@ impl Val {
         }
     }
 
-    pub fn map_indexed(self, f: &dyn Fn(i64, Val) -> Val) -> Self {
-        if let Val::Coll(xs, d) = self {
-            // TODO also map over d
-            assert_eq!(d.len(), 0);
-            Val::Coll(xs.map_indexed(|i, v| f(i as i64, v.clone())), HashMap::new())
-        } else {
-            panic!();
-        }
-    }
-
     pub fn retain(self, f: impl Fn(Val) -> bool) -> Self {
         if let Val::Coll(xs, d) = self {
             let mut dres = d.clone();

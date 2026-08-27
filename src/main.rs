@@ -215,10 +215,14 @@ fn quasiquote(form: &Val, env: &Env) -> Val {
         }
         _ => match form {
             Val::Coll(xs, d) => {
-                Val::Coll(xs.map_indexed(|_, x| quasiquote(&x, env)),
-                          d.iter().map(|(k, v)| {
-                              (quasiquote(k, env), quasiquote(v, env))
-                          }).collect())
+                Val::Coll(
+                    sparsevec::SparseVec::from_entries(xs.entries().into_iter().map(|(i, x)| {
+                        (i, quasiquote(&x, env))
+                    }).collect()),
+                    d.iter().map(|(k, v)| {
+                        (quasiquote(k, env), quasiquote(v, env))
+                    }).collect()
+                )
             },
             _ => form.clone()
         }
@@ -317,6 +321,10 @@ fn main() {
 {dict op: \"list\" args: [{dict op: \"lit\" val: 5}]}]}", &glob).unwrap()),
              &glob),
         Ok(6.into())
+    );
+    assert_eq!(
+        eval_str("(kv-map [4 4 4] +)", &glob),
+        Ok(vec![4, 5, 6].into())
     );
     assert_eq!(
         eval_str("(map [1 2 3] + 2)", &glob),

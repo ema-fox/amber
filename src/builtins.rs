@@ -124,17 +124,6 @@ fn last_index(args: Val) -> YRes {
     coll.last_index().map(Val::from).ok_or(Val::from("no last index"))
 }
 
-fn map_indexed(xs: Vec<Val>) -> YRes {
-    match xs.as_slice() {
-        [coll, Val::Fn(AFn(f))] => {
-            Ok(coll.clone().map_indexed(&|i: i64, entry: Val| {
-                f(Val::from(vec![entry.clone(), i.into()])).unwrap()
-            }))
-        },
-        _ => panic!()
-    }
-}
-
 fn bake(args: Val) -> YRes {
     let (f, coll): (Val, Val) = arity2(args);
     Ok(coll.bake(|k| call(&f, Val::from(vec![k])).ok()))
@@ -341,7 +330,6 @@ pub fn get() -> Env {
         ("-", minus as fn(Vec<Val>) -> YRes),
         ("/", div as fn(Vec<Val>) -> YRes),
         ("++", concat as fn(Vec<Val>) -> YRes),
-        ("map-indexed", map_indexed as fn(Vec<Val>) -> YRes),
         ("merge-with", merge_with as fn(Vec<Val>) -> YRes),
         ("retain", retain as fn(Vec<Val>) -> YRes),
         ("negate", negate as fn(Vec<Val>) -> YRes),

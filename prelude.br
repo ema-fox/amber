@@ -40,6 +40,13 @@ mapf: {fn {++ [inner outer] xs}
 map: {fn args
   (bake {call mapf args} args.0)}
 
+kv-mapf: {fn {++ [inner outer] xs}
+  {fn ys
+    {call outer (++ ys [{call inner ys}] xs)}}}
+
+kv-map: {fn args
+  (bake {call kv-mapf args} args.0)}
+
 [fibonacci define-fibonacci!]: (placeholder-fn)
 (define-fibonacci!
   {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}})
