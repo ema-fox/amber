@@ -72,8 +72,8 @@ fn pbind(name: &Val) -> impl Fn (&str) -> IResult<&str, Val> {
 }
 
 fn pbraceinst(inp: &str) -> IResult<&str, Val> {
-    map(delimited(char('{'), (psym, insts), cut(char('}'))),
-        |(op, args): (&str, Vec<Val>)| create::inst(op, args)
+    map(delimited(char('{'), insts, cut(char('}'))),
+        |args: Vec<Val>| create::inst("op", args)
     ).parse(inp)
 }
 

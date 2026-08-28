@@ -16,7 +16,7 @@ mod create;
 mod parse;
 
 mod builtins;
-use builtins::{Env, YRes, call};
+use builtins::{Env, YRes, call, op_op_env};
 
 #[derive(Debug, Clone)]
 enum Inst {
@@ -31,6 +31,15 @@ enum Inst {
     Fn(String, Vec<Inst>, Box<Inst>),
     Module(Vec<Val>),
     Quasiquote(Val)
+}
+
+fn macro_expand1(form: Val, env: &Env) -> Val {
+    if let Some(op) = form.get("op") {
+        let op_str: String = format!("op-{}", String::try_from(op).unwrap());
+        if let Some(mac) = env.get(&op_str.into()) {
+           call(&mac, form.get("args").unwrap().clone()).unwrap()
+        } else {form}
+    } else {form}
 }
 
 fn macro_expand(form: Val, env: &Env) -> Val {
@@ -62,6 +71,7 @@ fn macro_expand(form: Val, env: &Env) -> Val {
 }
 
 fn dest_macro_expand(dest: Val, env: &Env) -> (Val, Vec<Val>) {
+    let dest = macro_expand1(dest, &op_op_env());
     let dest_op_str = format!("bind-op-{}", String::try_from(dest.get("op").unwrap()).unwrap());
     if dest_op_str == "bind-op-deref" {
         (dest.get("name").unwrap().clone(), vec![])
@@ -210,12 +220,23 @@ fn eval_dict(insts: &Vec<Inst>, env: &Env) -> im::HashMap<Val, Val> {
     dict
 }
 
+fn get_op(form: &Val) -> Option<String> {
+    form.get("op").map(|op| String::try_from(op).unwrap())
+}
+
 fn quasiquote(form: &Val, env: &Env) -> Val {
     // TODO performance quasiquote goes over the entire form but only the parts which contain unqotes need to be visited
-    match form.get("op") {
+    // TODO cleaned_form is an ugly hack, need a better way to deal with this
+    // perhaps we go
+    // {op: "macro" find macro and call it
+    // {op: "inst" macro-expand args and convert to final-inst
+    // {op: "final-inst" leave as is
+    // macros which do not want their result to be macro-expanded upon can go straight to final-inst
+    let cleaned_form = macro_expand1(form.clone(), &op_op_env());
+    match cleaned_form.get("op") {
         Some(Val::Str(op)) if op == "uq" => {
             // TODO performance: eval_val does macro expansion
-            eval_val(&form.get("args").unwrap()[0], env).unwrap()
+            eval_val(&cleaned_form.get("args").unwrap()[0], env).unwrap()
         }
         _ => match form {
             Val::Coll(xs, d) => {
@@ -303,9 +324,9 @@ fn main() {
         eval_str("\"this is a string inside of a string\"", &glob),
         Ok("this is a string inside of a string".into())
     );
-    assert_eq!(eval_str("({dict a: 4 b: 5} \"c\")", &glob), Err("c".into()));
+    assert_eq!(eval_str("({a: 4 b: 5} \"c\")", &glob), Err("c".into()));
     assert_eq!(
-        eval_str("(merge {dict a: 4 b: 5} {dict a: 2 c: 3})", &glob),
+        eval_str("(merge {a: 4 b: 5} {a: 2 c: 3})", &glob),
         Ok(im::HashMap::from(vec![("c", 3), ("b", 5), ("a", 2)]).into())
     );
     assert_eq!(
@@ -313,16 +334,16 @@ fn main() {
         Ok(vec![1, 2, 3, 4, 5, 6].into())
     );
     assert_eq!(
-        eval_str("(retain {dict a: 4 b: 5} {dict a: 1})", &glob),
+        eval_str("(retain {a: 4 b: 5} {a: 1})", &glob),
         Ok(im::HashMap::from(vec![("a", 4)]).into())
     );
     assert_eq!(
-        eval_str("(retain {dict a: 4 b: 5} (negate {dict a: 1}))", &glob),
+        eval_str("(retain {a: 4 b: 5} (negate {a: 1}))", &glob),
         Ok(im::HashMap::from(vec![("b", 5)]).into())
     );
     assert_eq!(
-        eval(&val_to_inst(&eval_str("{dict op: \"call\" args: [{dict op: \"deref\" name: \"inc\"}
-{dict op: \"list\" args: [{dict op: \"lit\" val: 5}]}]}", &glob).unwrap()),
+        eval(&val_to_inst(&eval_str("{op: \"call\" args: [{op: \"deref\" name: \"inc\"}
+{op: \"list\" args: [{op: \"lit\" val: 5}]}]}", &glob).unwrap()),
              &glob),
         Ok(6.into())
     );

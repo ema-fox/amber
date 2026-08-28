@@ -1,14 +1,14 @@
 op-do: {fn body
-  {dict op: "call"
-   args: [{dict op: "fn" args: (++ [{dict op: "list" args: []}] body)}
-          {dict op: "list" args: []}]}}
+  {op: "call"
+   args: [{op: "fn" args: (++ [{op: "list" args: []}] body)}
+          {op: "list" args: []}]}}
 
 inc: {fn [x] (+ x 1)}
 
 merge: {fn [d0 d1] (merge-with {fn [a b] b} d0 d1)}
 
-as-deref: {fn [name] {dict op: "deref" name: name}}
-as-lit: {fn [val] {dict op: "lit" val: val}}
+as-deref: {fn [name] {op: "deref" name: name}}
+as-lit: {fn [val] {op: "lit" val: val}}
 
 genname: {fn [x] (as-deref (gensym x))}
 
@@ -25,8 +25,7 @@ slice: {fn [xs start end]
 
 bind-op-++: {fn [coll rest]
   arg-name: (gensym "arg")
-  {dict
-   bind: arg-name
+  {bind: arg-name
    ops: [
      {qq {uq coll}: {uq (as-deref arg-name)}}
      {qq {uq rest}: (slice {uq (as-deref arg-name)}

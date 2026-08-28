@@ -262,6 +262,26 @@ fn name_to_lit(inst: Val) -> Val {
     }
 }
 
+fn get_op(form: &Val) -> Option<String> {
+    form.get("op").map(|op| String::try_from(op).unwrap())
+}
+
+fn op_op(args: Val) -> YRes {
+    let (x, xs) = arity1andmore(args);
+    match get_op(&x).as_deref() {
+        Some("deref") => {
+            Ok(create::inst(&String::try_from(x.get("name").unwrap()).unwrap(),
+                            xs))
+        }
+        Some("bind") => {
+            let mut ys = vec![x];
+            ys.extend(xs);
+            Ok(create::inst("dict", ys))
+        }
+        _ => panic!()
+    }
+}
+
 fn op_call_coll(args: Val) -> YRes {
     let xs = Vec::try_from(args).unwrap();
     Ok(create::inst("call", vec![xs[0].clone(),
@@ -303,6 +323,14 @@ fn wrapf(f: &'static fn(Val) -> YRes) -> AFn {
 
 use std::fmt::Debug;
 
+fn arity1andmore(v: Val) -> (Val, Vec<Val>) {
+    let xs = Vec::try_from(v).unwrap();
+    match xs.as_slice() {
+        [a, more@..] => (a.clone(), more.to_vec()),
+        _ => panic!("Wrong arity, expected at least 1 got {}", xs.len())
+    }
+}
+
 fn arity1<A>(v: Val) -> A where
     A: TryFrom<Val>, <A as TryFrom<Val>>::Error: Debug {
     let xs = Vec::try_from(v).unwrap();
@@ -320,6 +348,14 @@ fn arity2<A, B>(v: Val) -> (A, B) where
         [a, b] => (a.clone().try_into().unwrap(), b.clone().try_into().unwrap()),
         _ => panic!("Wrong arity, expected 2 got {}", xs.len())
     }
+}
+
+pub fn op_op_env() -> Env {
+   let mut res: Env = im::HashMap::new();
+    res.extend([
+        ("op-op", op_op as fn(Val) -> YRes),
+    ].iter().map(|(name, f)| (Val::from(*name), Val::Fn(wrapf(f)))));
+    res
 }
 
 pub fn get() -> Env {
@@ -342,6 +378,7 @@ pub fn get() -> Env {
         ("op-dot", op_dot as fn(Vec<Val>) -> YRes),
     ].iter().map(|(name, f)| ((*name).into(), Val::Fn(wrap_list_arg(f)))).collect();
     res.extend([
+        ("op-op", op_op as fn(Val) -> YRes),
         ("op-call-coll", op_call_coll as fn(Val) -> YRes),
         ("bind-op-list", bind_op_list as fn(Val) -> YRes),
         ("range", range as fn(Val) -> YRes),
