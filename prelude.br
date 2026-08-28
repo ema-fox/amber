@@ -67,6 +67,7 @@ zipf: {fn {++ [f] xs}
     {call f (map xs {fn [x] {call x args}})}}}
 
 zip: {fn args
+  #"TODO potential performance improvement by baking with the smallest of args"
   (bake {call zipf args} args.1)}
 
 [fibonacci define-fibonacci!]: (placeholder-fn)
