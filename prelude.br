@@ -32,9 +32,25 @@ bind-op-++: {fn [coll rest]
                            {uq (as-lit (end-index coll.args))}
                            (end-index {uq (as-deref arg-name)}))}]}}
 
+bind-op-++<: {fn [rest coll]
+  arg-name: (gensym "arg")
+  {bind: arg-name
+   ops: [
+     {qq {uq rest}: (slice {uq (as-deref arg-name)}
+                           0
+                           (- (end-index {uq (as-deref arg-name)})
+                              {uq (as-lit (end-index coll.args))}))}
+     {qq {uq coll}: (slice {uq (as-deref arg-name)}
+                           (- (end-index {uq (as-deref arg-name)})
+                              {uq (as-lit (end-index coll.args))})
+                           (end-index {uq (as-deref arg-name)}))}]}}
+
+apply: {fn {++ [f] {++< xs [ys]}}
+  {call f (++ xs ys)}}
+
 mapf: {fn {++ [inner outer] xs}
   {fn ys
-    {call outer (++ [{call inner ys}] xs)}}}
+    (apply outer {call inner ys} xs)}}
 
 map: {fn args
   (bake {call mapf args} args.0)}
