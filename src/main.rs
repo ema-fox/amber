@@ -5,6 +5,8 @@ use std::env;
 use im;
 use im::hashmap;
 
+use panic_context::panic_context;
+
 mod sparsevec;
 
 mod val;
@@ -107,7 +109,8 @@ fn val_to_inst(y: &Val) -> Inst {
         },
         "bind" => {
             let args: Vec<Val> = y.get("args").unwrap().clone().try_into().unwrap();
-            Inst::Bind(args[0].get("name").expect("bind op should have name").try_into().expect("name should be a string"),
+            panic_context!("bind: {}", y.repr());
+            Inst::Bind(args[0].get("name").expect("deref op should have name").try_into().expect("name should be a string"),
                        Box::new(val_to_inst(&args[1])))
         },
         "list" => {
@@ -178,6 +181,7 @@ fn eval_vals(vinsts: &Vec<Val>, env: &Env) -> Env {
     let mut env2 = env.clone();
     let mut result_env = im::HashMap::new();
     for vinst in vinsts {
+        panic_context!("{}", vinst.repr());
         for vinst2 in bind_macro_expand(macro_expand(vinst.clone(), &env2), &env2) {
             let inst = val_to_inst(&vinst2);
             if let Inst::Bind(binding_name, inner_inst) = inst {
