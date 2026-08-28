@@ -62,6 +62,13 @@ kv-mapf: {fn {++ [inner outer] xs}
 kv-map: {fn args
   (bake {call kv-mapf args} args.0)}
 
+zipf: {fn {++ [f] xs}
+  {fn args
+    {call f (map xs {fn [x] {call x args}})}}}
+
+zip: {fn args
+  (bake {call zipf args} args.1)}
+
 [fibonacci define-fibonacci!]: (placeholder-fn)
 (define-fibonacci!
   {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}})

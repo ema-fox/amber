@@ -355,6 +355,10 @@ fn main() {
         eval_str("(map [1 2 3] + 2)", &glob),
         Ok(vec![3, 4, 5].into())
     );
+    assert_eq!(
+        eval_str("(zip + [1 2 3] [30 20 10])", &glob),
+        Ok(vec![31, 22, 13].into())
+    );
 
     let args: Vec<String> = env::args().collect();
     if let [_, path] = args.as_slice() {
