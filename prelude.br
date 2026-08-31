@@ -17,6 +17,12 @@ op-or: {fn [a b]
         {uq a-name}: {as-result {uq a}}
         {if {uq a-name}.ok {uq a-name}.ok {uq b}}}}}
 
+op-and: {fn [a b]
+  a-name: (genname "a")
+  {qq {do
+        {uq a-name}: {as-result {uq a}}
+        {if {uq a-name}.ok {uq b} (negate {uq a-name}).err}}}}
+
 end-index: {fn [xs] (inc {or (last-index xs) -1})}
 
 slice: {fn [xs start end]
@@ -80,6 +86,14 @@ merge-with: {fn {++ [f] xs}
   (bake (apply merge-withf f xs) (apply union xs))}
 
 merge: {fn xs (apply merge-with {fn [a b] b} xs)}
+
+filterf: {fn {++ [f pred] xs}
+  {fn ys
+    res: (apply f ys)
+    {and (apply pred res xs) res}}}
+
+filter: {fn args
+  (unsparse (bake-some (apply filterf args) args.0))}
 
 splice: {fn [xs start end replacement]
   (++ (slice xs (start-index xs) start)

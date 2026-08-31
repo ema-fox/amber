@@ -344,7 +344,7 @@ fn arity1<A>(v: Val) -> A where
     A: TryFrom<Val>, <A as TryFrom<Val>>::Error: Debug {
     let xs = Vec::try_from(v).unwrap();
     match xs.as_slice() {
-        [a] => a.clone().try_into().unwrap(),
+        [a] => a.clone().try_into().expect(&format!("{}", a.repr())),
         _ => panic!("Wrong arity, expected 1 got {}", xs.len())
     }
 }
