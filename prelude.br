@@ -81,6 +81,15 @@ merge-with: {fn {++ [f] xs}
 
 merge: {fn xs (apply merge-with {fn [a b] b} xs)}
 
+splice: {fn [xs start end replacement]
+  (++ (slice xs (start-index xs) start)
+      replacement
+      (slice xs end (end-index xs)))}
+
+op-->: {fn forms
+  (reduce forms {fn [inner outer]
+                  (merge outer {args: (splice outer.args 1 1 [inner])})})}
+
 [fibonacci define-fibonacci!]: (placeholder-fn)
 (define-fibonacci!
   {fn [x] {if (< x 2) x (+ (fibonacci (- x 1)) (fibonacci (- x 2)))}})
