@@ -31,6 +31,7 @@ pub fn call(x: &Val, args: Val) -> YRes {
 
 fn eq(xs: Vec<Val>) -> Result<Val, Val> {
     match xs.as_slice() {
+        [first] => Ok(first.clone()),
         [first, second] => {
             if first == second {
                 Ok(xs[0].clone())
