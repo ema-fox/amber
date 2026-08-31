@@ -25,6 +25,11 @@ pub fn call(x: &Val, args: Val) -> YRes {
                 _ => panic!("Coll only expects one arg when called")
             }
         },
+        Val::Str(s) => {
+            let i: i64 = arity1(args);
+            s.get(i as usize..i as usize + 1).map(|s1| Val::Str(s1.to_string()))
+                .ok_or(Val::from(i))
+        },
         _ => panic!("Value is not callable") // TODO give more information about `x`
     }
 }
