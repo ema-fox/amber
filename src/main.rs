@@ -22,7 +22,7 @@ use builtins::{Env, YRes, call, op_op_env};
 enum Inst {
     Lit(Val),
     Deref(String),
-    Bind(String, Box<Inst>),
+    Bind(Box<Inst>, Box<Inst>),
     List(Vec<Inst>),
     Dict(Vec<Inst>),
     Call(Box<Inst>, Box<Inst>),
@@ -120,7 +120,12 @@ fn val_to_inst(y: &Val) -> Inst {
         "bind" => {
             let args: Vec<Val> = y.get("args").unwrap().clone().try_into().unwrap();
             panic_context!("bind: {}", y.repr());
-            Inst::Bind(args[0].get("name").expect("deref op should have name").try_into().expect("name should be a string"),
+            Inst::Bind(Box::new(match get_op(&args[0]).as_deref() {
+                Some("deref") => Inst::Lit(
+                    args[0].get("name").expect("deref op should have name").try_into().expect("name should be a string")
+                ),
+                _ => val_to_inst(&args[0])
+            }),
                        Box::new(val_to_inst(&args[1])))
         },
         "list" => {
@@ -175,7 +180,7 @@ fn val_to_inst(y: &Val) -> Inst {
 fn eval_body(insts: &Vec<Inst>, env: &mut Env) {
     for inst in insts {
         if let Inst::Bind(binding_name, inner_inst) = inst {
-            env.insert(binding_name.clone().into(), eval(&inner_inst, &env).unwrap());
+            env.insert(eval(&binding_name, &env).unwrap(), eval(&inner_inst, &env).unwrap());
         } else {
             eval(&inst, &env).unwrap();
         }
@@ -195,7 +200,7 @@ fn eval_vals(vinsts: &Vec<Val>, env: &Env) -> Env {
         for vinst2 in bind_macro_expand(macro_expand(vinst.clone(), &env2), &env2) {
             let inst = val_to_inst(&vinst2);
             if let Inst::Bind(binding_name, inner_inst) = inst {
-                let name = Val::from(binding_name.clone());
+                let name = eval(&binding_name, &env2).unwrap();
                 let result = eval(&inner_inst, &env2).unwrap();
                 env2.insert(name.clone(), result.clone());
                 result_env.insert(name, result);
@@ -211,7 +216,7 @@ fn eval_dict(insts: &Vec<Inst>, env: &Env) -> im::HashMap<Val, Val> {
     let mut dict = im::HashMap::new();
     for inst in insts {
         if let Inst::Bind(binding_name, inner_inst) = inst {
-            dict.insert(Val::Str(binding_name.to_string()),
+            dict.insert(eval(&binding_name, &env).unwrap(),
                         eval(&inner_inst, &env).unwrap());
         } else {
             panic!();
