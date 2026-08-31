@@ -5,7 +5,6 @@ op-do: {fn body
 
 inc: {fn [x] (+ x 1)}
 
-merge: {fn [d0 d1] (merge-with {fn [a b] b} d0 d1)}
 
 as-deref: {fn [name] {op: "deref" name: name}}
 as-lit: {fn [val] {op: "lit" val: val}}
@@ -55,6 +54,9 @@ mapf: {fn {++ [inner outer] xs}
 map: {fn args
   (bake {call mapf args} args.0)}
 
+keep: {fn args
+  (unsparse (bake-some {call mapf args} args.0))}
+
 kv-mapf: {fn {++ [inner outer] xs}
   {fn ys
     {call outer (++ ys [{call inner ys}] xs)}}}
@@ -69,6 +71,15 @@ zipf: {fn {++ [f] xs}
 zip: {fn args
   #"TODO potential performance improvement by baking with the smallest of args"
   (bake {call zipf args} args.1)}
+
+merge-withf: {fn {++ [f] xs}
+  {fn ys
+    (reduce (keep xs {fn [x] {call x ys}}) f)}}
+
+merge-with: {fn {++ [f] xs}
+  (bake (apply merge-withf f xs) (apply union xs))}
+
+merge: {fn xs (apply merge-with {fn [a b] b} xs)}
 
 [fibonacci define-fibonacci!]: (placeholder-fn)
 (define-fibonacci!

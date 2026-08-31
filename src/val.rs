@@ -104,6 +104,15 @@ impl Val {
         }
     }
 
+    pub fn union(self, other: Self) -> Self {
+        if let (Val::Coll(mut xs, d), Val::Coll(ys, d2)) = (self, other) {
+            xs.merge(ys);
+            Val::Coll(xs, d.union_with(d2, |_, b| b))
+        } else {
+            panic!();
+        }
+    }
+
     pub fn retain(self, f: impl Fn(Val) -> bool) -> Self {
         if let Val::Coll(xs, d) = self {
             let mut dres = d.clone();
@@ -114,9 +123,29 @@ impl Val {
         }
     }
 
-    pub fn bake(&self, f: impl Fn(Val) -> Option<Val>) -> Self {
+    pub fn unsparse(&self) -> Self {
+         if let Val::Coll(xs, d) = self {
+             Val::Coll(SparseVec::from(xs.unsparse().into_iter().cloned().collect::<Vec<_>>()),
+                       d.clone())
+        } else {
+            panic!();
+        }
+    }
+
+    pub fn bake<E>(&self, f: impl Fn(Val) -> Result<Val, E>) -> Result<Val, E> {
         if let Val::Coll(xs, d) = self {
-            Val::Coll(xs.bake(|i| f(Val::from(i as i64))),
+            Ok(Val::Coll(xs.bake(|i| f(Val::from(i as i64)))?,
+                         HashMap::from(d.keys().map(|k| f(k.clone()).map(|x| (k.clone(), x)))
+                                       .collect::<Result<Vec<_>, _>>()?)))
+        } else {
+            panic!();
+        }
+    }
+
+    pub fn bake_some(&self, f: impl Fn(Val) -> Option<Val>) -> Self {
+        // TODO reconsider name
+        if let Val::Coll(xs, d) = self {
+            Val::Coll(xs.bake_some(|i| f(Val::from(i as i64))),
                       HashMap::from(d.keys().filter_map(|k| f(k.clone()).map(|x| (k.clone(), x)))
                       .collect::<Vec<_>>()))
         } else {

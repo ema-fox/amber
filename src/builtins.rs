@@ -125,9 +125,19 @@ fn last_index(args: Val) -> YRes {
     coll.last_index().map(Val::from).ok_or(Val::from("no last index"))
 }
 
+fn unsparse(args: Val) -> YRes {
+    let coll: Val = arity1(args);
+    Ok(coll.unsparse())
+}
+
 fn bake(args: Val) -> YRes {
     let (f, coll): (Val, Val) = arity2(args);
-    Ok(coll.bake(|k| call(&f, Val::from(vec![k])).ok()))
+    coll.bake(|k| call(&f, Val::from(vec![k])))
+}
+
+fn bake_some(args: Val) -> YRes {
+    let (f, coll): (Val, Val) = arity2(args);
+    Ok(coll.bake_some(|k| call(&f, Val::from(vec![k])).ok()))
 }
 
 fn reduce(args: Val) -> YRes {
@@ -135,15 +145,8 @@ fn reduce(args: Val) -> YRes {
     Ok(coll.values().iter().cloned().reduce(|a, b| call(&f, Val::from(vec![a, b])).unwrap()).unwrap())
 }
 
-fn merge_with(xs: Vec<Val>) -> YRes {
-    match xs.as_slice() {
-        [Val::Fn(AFn(f)), c0, c1] => {
-            let d0: im::HashMap<Val, Val> = c0.clone().try_into().unwrap();
-            let d1: im::HashMap<Val, Val> = c1.clone().try_into().unwrap();
-            Ok(Val::from(d0.union_with(d1, |a, b| f(Val::from(vec![a, b])).unwrap())))
-        },
-        _ => panic!()
-    }
+fn union(xs: Vec<Val>) -> YRes {
+    Ok(xs.into_iter().reduce(|a, b| a.union(b)).unwrap())
 }
 
 fn retain(xs: Vec<Val>) -> YRes {
@@ -367,7 +370,7 @@ pub fn get() -> Env {
         ("-", minus as fn(Vec<Val>) -> YRes),
         ("/", div as fn(Vec<Val>) -> YRes),
         ("++", concat as fn(Vec<Val>) -> YRes),
-        ("merge-with", merge_with as fn(Vec<Val>) -> YRes),
+        ("union", union as fn(Vec<Val>) -> YRes),
         ("retain", retain as fn(Vec<Val>) -> YRes),
         ("negate", negate as fn(Vec<Val>) -> YRes),
         ("rand-choice", rand_choice as fn(Vec<Val>) -> YRes),
@@ -386,7 +389,9 @@ pub fn get() -> Env {
         ("first-index", first_index as fn(Val) -> YRes),
         ("start-index", start_index as fn(Val) -> YRes),
         ("last-index", last_index as fn(Val) -> YRes),
+        ("unsparse", unsparse as fn(Val) -> YRes),
         ("bake", bake as fn(Val) -> YRes),
+        ("bake-some", bake_some as fn(Val) -> YRes),
         ("reduce", reduce as fn(Val) -> YRes),
         ("split", split as fn(Val) -> YRes),
         ("read-file", read_file as fn(Val) -> YRes),

@@ -208,7 +208,13 @@ impl<T> SparseVec<T> {
         }).collect())
     }
 
-    pub fn bake<D>(&self, f: impl Fn(usize) -> Option<D>) -> SparseVec<D> {
+    pub fn bake<D, E>(&self, f: impl Fn(usize) -> Result<D, E>) -> Result<SparseVec<D>, E> {
+        Ok(SparseVec::from_entries(self.entries().into_iter().map(|(i, _)| {
+            f(i).map(|x| (i, x))
+        }).collect::<Result<_, _>>()?))
+    }
+
+    pub fn bake_some<D>(&self, f: impl Fn(usize) -> Option<D>) -> SparseVec<D> {
         SparseVec::from_entries(self.entries().into_iter().filter_map(|(i, _)| {
             f(i).map(|x| (i, x))
         }).collect())
