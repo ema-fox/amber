@@ -182,11 +182,60 @@ impl Val {
         }
     }
 
+    pub fn pretty(&self) -> Vec<String> {
+        match self {
+            Val::Coll(xs, d) => {
+                let mut elements = vec![];
+                let mut expected_i = 0;
+                for (i, v) in xs.entries() {
+                    if i != expected_i {
+                        elements.push(format!("{}:", i));
+                    }
+                    elements.append(&mut v.pretty());
+                    expected_i = i + 1;
+                }
+                for (k, v) in d {
+                    let mut vp = v.pretty();
+                    if vp.len() == 1 {
+                        elements.push(format!("{}: {}", k.naked_repr(), vp[0]));
+                    } else {
+                        elements.push(format!("{}:", k.naked_repr()));
+                        elements.append(&mut vp);
+                    }
+                }
+                let (open, close) = if xs.count() > 0 {
+                    ('[', ']')
+                } else {
+                    ('{', '}')
+                };
+                elements.get_mut(0).unwrap().insert(0, open);
+                elements.last_mut().unwrap().push(close);
+                let mut iter = elements.into_iter();
+                elements = vec![iter.next().unwrap()];
+                elements.extend(iter.map(|mut s| {s.insert(0, ' '); s}));
+                if elements.iter().map(String::len).sum::<usize>() < 40 {
+                    vec![elements.join("")]
+                } else {
+                    elements
+                }
+            }
+            _ => vec![self.repr()]
+        }
+    }
+
     pub fn naked_repr(&self) -> String {
         if let Val::Str(s) = self {
             s.clone()
         } else {
             self.repr()
+        }
+    }
+
+    pub fn naked_pretty(&self) -> Vec<String> {
+        if let Val::Str(s) = self {
+            vec![s.clone()]
+        } else {
+            self.pretty()
         }
     }
 }

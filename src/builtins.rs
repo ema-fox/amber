@@ -197,7 +197,7 @@ fn split(args: Val) -> YRes {
 }
 
 fn print(xs: Vec<Val>) {
-    print!("{}", xs.iter().map(Val::naked_repr).collect::<Vec<_>>().join(" "));
+    print!("{}", xs.iter().map(|x| x.naked_pretty().join("\n")).collect::<Vec<_>>().join(" "));
 }
 
 fn say(xs: Vec<Val>) -> YRes {
