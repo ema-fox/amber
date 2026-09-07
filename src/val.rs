@@ -155,7 +155,7 @@ impl Val {
 
     pub fn repr(&self) -> String {
         match self {
-            Val::Str(s) => format!("\"{}\"", s), // TODO escaping
+            Val::Str(s) => format!("{:?}", s),
             Val::Int(x) => format!("{}", x),
             Val::Coll(xs, d) => {
                 let mut elements = vec![];
