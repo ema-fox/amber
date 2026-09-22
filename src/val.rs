@@ -1,10 +1,11 @@
 use std::rc::Rc;
+use std::sync::Arc;
 
 use im::{HashMap, Vector};
 use crate::sparsevec::SparseVec;
 
 #[derive(Clone)]
-pub struct AFn(pub Rc<dyn Fn (Val) -> Result<Val, Val>>);
+pub struct AFn(pub Rc<dyn Fn (Val) -> Res>);
 
 impl std::fmt::Debug for AFn {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -35,6 +36,16 @@ pub enum Val {
     Fn(AFn)
 }
 
+pub type Ref = Arc<Val>;
+pub type Res = Result<Ref, Ref>;
+
+pub fn refe<T: Into<Val>>(v: T) -> Ref {
+    Arc::new(v.into())
+}
+
+pub fn ok<T: Into<Val>>(v: T) -> Res {
+    Ok(refe(v))
+}
 
 impl Val {
     pub fn get<K>(&self, k: K) -> Option<&Val>

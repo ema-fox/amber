@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::sync::Arc;
 use std::fs::read_to_string;
 use std::env;
 
@@ -10,13 +11,13 @@ use panic_context::panic_context;
 mod sparsevec;
 
 mod val;
-use val::{Val, AFn};
+use val::{Val, Res, AFn, ok};
 
 mod create;
 mod parse;
 
 mod builtins;
-use builtins::{Env, YRes, call, op_op_env};
+use builtins::{Env, call, op_op_env};
 
 #[derive(Debug, Clone)]
 enum Inst {
@@ -37,7 +38,7 @@ fn macro_expand1(form: Val, env: &Env) -> Val {
     if let Some(op) = form.get("op") {
         let op_str: String = format!("op-{}", String::try_from(op).unwrap());
         if let Some(mac) = env.get(&op_str.into()) {
-           call(&mac, form.get("args").unwrap().clone()).unwrap()
+           (*call(&mac, Arc::new(form.get("args").unwrap().clone())).unwrap()).clone()
         } else {form}
     } else {form}
 }
@@ -59,7 +60,7 @@ fn macro_expand(form: Val, env: &Env) -> Val {
             form2.insert("args", Val::from(args2));
             form2
         } else if let Some(mac) = env.get(&op_str.into()) {
-            macro_expand(call(&mac, form.get("args").unwrap().clone()).unwrap(), env)
+            macro_expand((*call(&mac, Arc::new(form.get("args").unwrap().clone())).unwrap()).clone(), env)
         } else {
             if let Some(args) = form.get("args").map(|v| Vec::try_from(v.clone()).unwrap()) {
                 let mut form2 = form.clone();
@@ -76,7 +77,7 @@ fn dest_macro_expand(dest: Val, env: &Env) -> (Val, Vec<Val>) {
     if dest_op_str == "bind-op-deref" {
         (dest.get("name").unwrap().clone(), vec![])
     } else if let Some(mac) = env.get(&dest_op_str.clone().into()) {
-        let foo = call(&mac, dest.get("args").unwrap().clone()).unwrap();
+        let foo = call(&mac, Arc::new(dest.get("args").unwrap().clone())).unwrap();
         (foo.get("bind").unwrap().clone(),
          Vec::try_from(foo.get("ops").unwrap().clone()).unwrap()
          .into_iter().flat_map(|form| bind_macro_expand(form, env)).collect())
@@ -180,14 +181,14 @@ fn val_to_inst(y: &Val) -> Inst {
 fn eval_body(insts: &Vec<Inst>, env: &mut Env) {
     for inst in insts {
         if let Inst::Bind(binding_name, inner_inst) = inst {
-            env.insert(eval(&binding_name, &env).unwrap(), eval(&inner_inst, &env).unwrap());
+            env.insert((*eval(&binding_name, &env).unwrap()).clone(), (*eval(&inner_inst, &env).unwrap()).clone());
         } else {
             eval(&inst, &env).unwrap();
         }
     }
 }
 
-fn eval_val(vinst: &Val, env: &Env) -> YRes {
+fn eval_val(vinst: &Val, env: &Env) -> Res {
     let inst = val_to_inst(&macro_expand(vinst.clone(), env));
     eval(&inst, &env)
 }
@@ -200,8 +201,8 @@ fn eval_vals(vinsts: &Vec<Val>, env: &Env) -> Env {
         for vinst2 in bind_macro_expand(macro_expand(vinst.clone(), &env2), &env2) {
             let inst = val_to_inst(&vinst2);
             if let Inst::Bind(binding_name, inner_inst) = inst {
-                let name = eval(&binding_name, &env2).unwrap();
-                let result = eval(&inner_inst, &env2).unwrap();
+                let name = (*eval(&binding_name, &env2).unwrap()).clone();
+                let result = (*eval(&inner_inst, &env2).unwrap()).clone();
                 env2.insert(name.clone(), result.clone());
                 result_env.insert(name, result);
             } else {
@@ -216,8 +217,8 @@ fn eval_dict(insts: &Vec<Inst>, env: &Env) -> im::HashMap<Val, Val> {
     let mut dict = im::HashMap::new();
     for inst in insts {
         if let Inst::Bind(binding_name, inner_inst) = inst {
-            dict.insert(eval(&binding_name, &env).unwrap(),
-                        eval(&inner_inst, &env).unwrap());
+            dict.insert((*eval(&binding_name, &env).unwrap()).clone(),
+                        (*eval(&inner_inst, &env).unwrap()).clone());
         } else {
             panic!();
         }
@@ -241,7 +242,7 @@ fn quasiquote(form: &Val, env: &Env) -> Val {
     match cleaned_form.get("op") {
         Some(Val::Str(op)) if op == "uq" => {
             // TODO performance: eval_val does macro expansion
-            eval_val(&cleaned_form.get("args").unwrap()[0], env).unwrap()
+            (*eval_val(&cleaned_form.get("args").unwrap()[0], env).unwrap()).clone()
         }
         _ => match form {
             Val::Coll(xs, d) => {
@@ -259,24 +260,24 @@ fn quasiquote(form: &Val, env: &Env) -> Val {
     }
 }
 
-fn eval(inst: &Inst, env: &Env) -> YRes {
+fn eval(inst: &Inst, env: &Env) -> Res {
     match inst {
-        Inst::Lit(x) => Ok(x.clone()),
-        Inst::Deref(x) => env.get(&x.clone().into()).cloned().ok_or(format!("no {} in env", x).into()),
-        Inst::List(xs) => Ok(xs.iter().map(|x| eval(x, env).unwrap()).collect::<Vec<_>>().into()),
-        Inst::Dict(xs) => Ok(Val::from(eval_dict(xs, env))),
+        Inst::Lit(x) => ok(x.clone()),
+        Inst::Deref(x) => env.get(&x.clone().into()).cloned().map(Arc::new).ok_or_else(|| Arc::new(format!("no {} in env", x).into())),
+        Inst::List(xs) => ok(xs.iter().map(|x| (*eval(x, env).unwrap()).clone()).collect::<Vec<_>>()),
+        Inst::Dict(xs) => ok(eval_dict(xs, env)),
         Inst::Call(finst, arginst) => {
             call(&eval(finst, env).unwrap(),
                  eval(arginst, env).unwrap())
         },
         Inst::AsResult(cond_inst) => {
             match eval(cond_inst, env) {
-                Ok(v) => Ok(Val::from(hashmap!{
-                    Val::from("ok") => v
-                })),
-                Err(v) => Ok(Val::from(hashmap!{
-                    Val::from("err") => v
-                }))
+                Ok(v) => ok(hashmap!{
+                    Val::from("ok") => (*v).clone()
+                }),
+                Err(v) => ok(hashmap!{
+                    Val::from("err") => (*v).clone()
+                })
             }
         }
         Inst::If(cond_inst, then_inst, else_inst) => {
@@ -290,7 +291,7 @@ fn eval(inst: &Inst, env: &Env) -> YRes {
             let body = body.clone();
             let tail = tail.clone();
             let par_name = par_name.clone();
-            Ok(Val::Fn(AFn(Rc::new(move |arg: Val| {
+            ok(Val::Fn(AFn(Rc::new(move |arg: Val| {
                 let mut env2 = env.clone();
                 env2.insert(par_name.clone().into(), arg);
                 eval_body(&body, &mut env2);
@@ -298,20 +299,20 @@ fn eval(inst: &Inst, env: &Env) -> YRes {
             }))))
         },
         Inst::Module(body) => {
-            Ok(Val::from(eval_vals(&body, &env)))
+            ok(eval_vals(&body, &env))
         }
-        Inst::Quasiquote(form) => Ok(macro_expand(quasiquote(form, env), env)),
+        Inst::Quasiquote(form) => ok(macro_expand(quasiquote(form, env), env)),
         Inst::Bind(_, _) => panic!()
     }
 }
 
-fn eval_str(code: &str, env: &Env) -> YRes {
+fn eval_str(code: &str, env: &Env) -> Res {
     eval_val(&parse::inst(code).unwrap().1, &env)
 }
 
 fn eval_body_str(code: &str, env: &Env) -> Env {
     let code2 = parse::module(code).unwrap().1 ;
-    im::HashMap::try_from(eval_val(&code2, &env).unwrap()).unwrap()
+    im::HashMap::try_from((*eval_val(&code2, &env).unwrap()).clone()).unwrap()
 }
 
 fn eval_file(path: &str, env: &Env) -> Env {
@@ -321,48 +322,48 @@ fn eval_file(path: &str, env: &Env) -> Env {
 fn main() {
     let mut glob: Env = builtins::get();
     glob.extend(eval_file("prelude.br", &glob));
-    assert_eq!(eval_str("{if (< 4 3) {do 0} (+ 90 9)}", &glob), Ok(99.into()));
-    assert_eq!(eval_str("({fn [a b] (+ a b)} 1 8)", &glob), Ok(9.into()));
-    assert_eq!(eval_str("({fn [a [[b1 b2] c]] (+ a b1 b2 c)} 1 [[8 5] 5])", &glob), Ok(19.into()));
-    assert_eq!(eval_str("(fibonacci 6)", &glob), Ok(8.into()));
+    assert_eq!(eval_str("{if (< 4 3) {do 0} (+ 90 9)}", &glob), ok(99));
+    assert_eq!(eval_str("({fn [a b] (+ a b)} 1 8)", &glob), ok(9));
+    assert_eq!(eval_str("({fn [a [[b1 b2] c]] (+ a b1 b2 c)} 1 [[8 5] 5])", &glob), ok(19));
+    assert_eq!(eval_str("(fibonacci 6)", &glob), ok(8));
     assert_eq!(
         eval_str("\"this is a string inside of a string\"", &glob),
-        Ok("this is a string inside of a string".into())
+        ok("this is a string inside of a string")
     );
-    assert_eq!(eval_str("({a: 4 b: 5} \"c\")", &glob), Err("c".into()));
+    assert_eq!(eval_str("({a: 4 b: 5} \"c\")", &glob), Err(Arc::new("c".into())));
     assert_eq!(
         eval_str("(merge {a: 4 b: 5} {a: 2 c: 3})", &glob),
-        Ok(im::HashMap::from(vec![("c", 3), ("b", 5), ("a", 2)]).into())
+        ok(im::HashMap::from(vec![("c", 3), ("b", 5), ("a", 2)]))
     );
     assert_eq!(
         eval_str("(++ [1 2 3] [4] [5 6])", &glob),
-        Ok(vec![1, 2, 3, 4, 5, 6].into())
+        ok(vec![1, 2, 3, 4, 5, 6])
     );
     assert_eq!(
         eval_str("(retain {a: 4 b: 5} {a: 1})", &glob),
-        Ok(im::HashMap::from(vec![("a", 4)]).into())
+        ok(im::HashMap::from(vec![("a", 4)]))
     );
     assert_eq!(
         eval_str("(retain {a: 4 b: 5} (negate {a: 1}))", &glob),
-        Ok(im::HashMap::from(vec![("b", 5)]).into())
+        ok(im::HashMap::from(vec![("b", 5)]))
     );
     assert_eq!(
         eval(&val_to_inst(&eval_str("{op: \"call\" args: [{op: \"deref\" name: \"inc\"}
 {op: \"list\" args: [{op: \"lit\" val: 5}]}]}", &glob).unwrap()),
              &glob),
-        Ok(6.into())
+        ok(6)
     );
     assert_eq!(
         eval_str("(kv-map [4 4 4] +)", &glob),
-        Ok(vec![4, 5, 6].into())
+        ok(vec![4, 5, 6])
     );
     assert_eq!(
         eval_str("(map [1 2 3] + 2)", &glob),
-        Ok(vec![3, 4, 5].into())
+        ok(vec![3, 4, 5])
     );
     assert_eq!(
         eval_str("(zip + [1 2 3] [30 20 10])", &glob),
-        Ok(vec![31, 22, 13].into())
+        ok(vec![31, 22, 13])
     );
 
     let args: Vec<String> = env::args().collect();
