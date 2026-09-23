@@ -11,7 +11,7 @@ use panic_context::panic_context;
 mod sparsevec;
 
 mod val;
-use val::{Val, Res, AFn, ok};
+use val::{Val, Ref, Res, AFn, ok};
 
 mod create;
 mod parse;
@@ -291,9 +291,9 @@ fn eval(inst: &Inst, env: &Env) -> Res {
             let body = body.clone();
             let tail = tail.clone();
             let par_name = par_name.clone();
-            ok(Val::Fn(AFn(Rc::new(move |arg: Val| {
+            ok(Val::Fn(AFn(Rc::new(move |arg: Ref| {
                 let mut env2 = env.clone();
-                env2.insert(par_name.clone().into(), arg);
+                env2.insert(par_name.clone().into(), (*arg).clone());
                 eval_body(&body, &mut env2);
                 eval(&tail, &env2)
             }))))

@@ -16,7 +16,7 @@ pub type Env = im::HashMap<Val, Val>;
 pub fn call(x: &Val, args: Ref) -> Res {
     match x {
         Val::Fn(f) => {
-            f.0((*args).clone())
+            f.0(args)
         },
         Val::Coll(_, _) => {
             let ys: Vec<_> = (*args).clone().try_into().unwrap();
@@ -26,7 +26,7 @@ pub fn call(x: &Val, args: Ref) -> Res {
             }
         },
         Val::Str(s) => {
-            let i: i64 = arity1((*args).clone());
+            let i: i64 = arity1(args);
             s.get(i as usize..i as usize + 1).map(|s1| Arc::new(Val::Str(s1.to_string())))
                 .ok_or_else(|| Arc::new(Val::from(i)))
         },
@@ -96,7 +96,7 @@ fn div(xs: Vec<Val>) -> Res {
     }
 }
 
-fn range(args: Val) -> Res {
+fn range(args: Ref) -> Res {
     let (from, to): (i64, i64) = arity2(args);
     ok(Val::Coll(SparseVec::range(from as usize, to as usize), im::HashMap::new()))
 }
@@ -115,37 +115,37 @@ fn concat(xs: Vec<Val>) -> Res {
     ok(Val::Coll(res, im::HashMap::new()))
 }
 
-fn start_index(args: Val) -> Res {
+fn start_index(args: Ref) -> Res {
     let coll: Val = arity1(args);
     ok(coll.start_index())
 }
 
-fn first_index(args: Val) -> Res {
+fn first_index(args: Ref) -> Res {
     let coll: Val = arity1(args);
     ok(coll.first_index())
 }
 
-fn last_index(args: Val) -> Res {
+fn last_index(args: Ref) -> Res {
     let coll: Val = arity1(args);
     coll.last_index().map(refe).ok_or_else(|| Arc::new(Val::from("no last index")))
 }
 
-fn unsparse(args: Val) -> Res {
+fn unsparse(args: Ref) -> Res {
     let coll: Val = arity1(args);
     ok(coll.unsparse())
 }
 
-fn bake(args: Val) -> Res {
+fn bake(args: Ref) -> Res {
     let (f, coll): (Val, Val) = arity2(args);
     coll.bake(|k| call(&f, refe(vec![k])).map(|x| (*x).clone())).map(Arc::new)
 }
 
-fn bake_some(args: Val) -> Res {
+fn bake_some(args: Ref) -> Res {
     let (f, coll): (Val, Val) = arity2(args);
     ok(coll.bake_some(|k| call(&f, refe(vec![k])).map(|x| (*x).clone()).ok()))
 }
 
-fn reduce(args: Val) -> Res {
+fn reduce(args: Ref) -> Res {
     let (coll, f): (Val, Val) = arity2(args);
     ok(coll.values().iter().cloned().reduce(|a, b| (*call(&f, refe(vec![a, b])).unwrap()).clone()).unwrap())
 }
@@ -167,7 +167,7 @@ fn negate(xs: Vec<Val>) -> Res {
     match xs.as_slice() {
         [f] => {
             let f = f.clone();
-            ok(Val::Fn(AFn(Rc::new(move |arg: Val| match call(&f, Arc::new(arg)) {
+            ok(Val::Fn(AFn(Rc::new(move |arg: Ref| match call(&f, arg) {
                 Ok(x) => Err(x),
                 Err(x) => Ok(x)
             }))))
@@ -191,7 +191,7 @@ fn str(xs: Vec<Val>) -> Res {
     ok(xs.iter().map(Val::naked_repr).collect::<Vec<_>>().join(""))
 }
 
-fn split(args: Val) -> Res {
+fn split(args: Ref) -> Res {
     let (s, sep): (String, String) = arity2(args);
     ok(s.split(&sep).collect::<Vec<_>>())
 }
@@ -216,7 +216,7 @@ fn ask(xs: Vec<Val>) -> Res {
     ok(Val::Str(res.trim_end_matches(&['\r', '\n'][..]).to_string()))
 }
 
-fn read_file(args: Val) -> Res {
+fn read_file(args: Ref) -> Res {
     let path: String = arity1(args);
     use std::fs::read_to_string;
     read_to_string(path).map(refe).map_err(|e| Arc::new(format!("{}", e).into()))
@@ -232,9 +232,9 @@ fn placeholder_fn(_xs: Vec<Val>) -> Res {
     let place: Rc<OnceCell<AFn>> = Rc::new(OnceCell::new());
     let place2 = place.clone();
     ok(vec![
-        Val::Fn(AFn(Rc::new(move |arg: Val| place.get().unwrap().0(arg)))),
-        Val::Fn(AFn(Rc::new(move |arg: Val| {
-            let args: Vec<Val> = arg.try_into().unwrap();
+        Val::Fn(AFn(Rc::new(move |arg: Ref| place.get().unwrap().0(arg)))),
+        Val::Fn(AFn(Rc::new(move |arg: Ref| {
+            let args: Vec<Val> = (*arg).clone().try_into().unwrap();
             if let Val::Fn(f) = args[0].clone() {
                 place2.set(f).unwrap();
             } else {
@@ -275,7 +275,7 @@ fn get_op(form: &Val) -> Option<String> {
     form.get("op").map(|op| String::try_from(op).unwrap())
 }
 
-fn op_op(args: Val) -> Res {
+fn op_op(args: Ref) -> Res {
     let (x, xs) = arity1andmore(args);
     match get_op(&x).as_deref() {
         Some("deref") => {
@@ -291,8 +291,8 @@ fn op_op(args: Val) -> Res {
     }
 }
 
-fn op_call_coll(args: Val) -> Res {
-    let xs = Vec::try_from(args).unwrap();
+fn op_call_coll(args: Ref) -> Res {
+    let xs = Vec::try_from((*args).clone()).unwrap();
     ok(create::inst("call", vec![xs[0].clone(),
                               create::inst("list", xs[1..].to_vec())]))
 }
@@ -307,8 +307,8 @@ fn op_dot(xs: Vec<Val>) -> Res {
     ok(res)
 }
 
-fn bind_op_list(args: Val) -> Res {
-    let args: Vec<Val> = Vec::try_from(args).unwrap();
+fn bind_op_list(args: Ref) -> Res {
+    let args: Vec<Val> = Vec::try_from((*args).clone()).unwrap();
     let list_name = Val::from(gensym("list"));
     ok(im::HashMap::from(vec![
         ("bind", list_name.clone()),
@@ -321,38 +321,38 @@ fn bind_op_list(args: Val) -> Res {
 }
 
 fn wrap_list_arg(f: &'static fn(Vec<Val>) -> Res) -> AFn {
-    AFn(Rc::new(|arg: Val| {
-        f(arg.try_into().unwrap())
+    AFn(Rc::new(|arg: Ref| {
+        f((*arg).clone().try_into().unwrap())
     }))
 }
 
-fn wrapf(f: &'static fn(Val) -> Res) -> AFn {
+fn wrapf(f: &'static fn(Ref) -> Res) -> AFn {
     AFn(Rc::new(f))
 }
 
 use std::fmt::Debug;
 
-fn arity1andmore(v: Val) -> (Val, Vec<Val>) {
-    let xs = Vec::try_from(v).unwrap();
+fn arity1andmore(v: Ref) -> (Val, Vec<Val>) {
+    let xs = Vec::try_from((*v).clone()).unwrap();
     match xs.as_slice() {
         [a, more@..] => (a.clone(), more.to_vec()),
         _ => panic!("Wrong arity, expected at least 1 got {}", xs.len())
     }
 }
 
-fn arity1<A>(v: Val) -> A where
+fn arity1<A>(v: Ref) -> A where
     A: TryFrom<Val>, <A as TryFrom<Val>>::Error: Debug {
-    let xs = Vec::try_from(v).unwrap();
+    let xs = Vec::try_from((*v).clone()).unwrap();
     match xs.as_slice() {
         [a] => a.clone().try_into().unwrap_or_else(|_| panic!("{}", a.repr())),
         _ => panic!("Wrong arity, expected 1 got {}", xs.len())
     }
 }
 
-fn arity2<A, B>(v: Val) -> (A, B) where
+fn arity2<A, B>(v: Ref) -> (A, B) where
     A: TryFrom<Val>, <A as TryFrom<Val>>::Error: Debug,
     B: TryFrom<Val>, <B as TryFrom<Val>>::Error: Debug {
-    let xs = Vec::try_from(v).unwrap();
+    let xs = Vec::try_from((*v).clone()).unwrap();
     match xs.as_slice() {
         [a, b] => (a.clone().try_into().unwrap(), b.clone().try_into().unwrap()),
         _ => panic!("Wrong arity, expected 2 got {}", xs.len())
@@ -362,7 +362,7 @@ fn arity2<A, B>(v: Val) -> (A, B) where
 pub fn op_op_env() -> Env {
    let mut res: Env = im::HashMap::new();
     res.extend([
-        ("op-op", op_op as fn(Val) -> Res),
+        ("op-op", op_op as fn(Ref) -> Res),
     ].iter().map(|(name, f)| (Val::from(*name), Val::Fn(wrapf(f)))));
     res
 }
@@ -387,19 +387,19 @@ pub fn get() -> Env {
         ("op-dot", op_dot as fn(Vec<Val>) -> Res),
     ].iter().map(|(name, f)| ((*name).into(), Val::Fn(wrap_list_arg(f)))).collect();
     res.extend([
-        ("op-op", op_op as fn(Val) -> Res),
-        ("op-call-coll", op_call_coll as fn(Val) -> Res),
-        ("bind-op-list", bind_op_list as fn(Val) -> Res),
-        ("range", range as fn(Val) -> Res),
-        ("first-index", first_index as fn(Val) -> Res),
-        ("start-index", start_index as fn(Val) -> Res),
-        ("last-index", last_index as fn(Val) -> Res),
-        ("unsparse", unsparse as fn(Val) -> Res),
-        ("bake", bake as fn(Val) -> Res),
-        ("bake-some", bake_some as fn(Val) -> Res),
-        ("reduce", reduce as fn(Val) -> Res),
-        ("split", split as fn(Val) -> Res),
-        ("read-file", read_file as fn(Val) -> Res),
+        ("op-op", op_op as fn(Ref) -> Res),
+        ("op-call-coll", op_call_coll as fn(Ref) -> Res),
+        ("bind-op-list", bind_op_list as fn(Ref) -> Res),
+        ("range", range as fn(Ref) -> Res),
+        ("first-index", first_index as fn(Ref) -> Res),
+        ("start-index", start_index as fn(Ref) -> Res),
+        ("last-index", last_index as fn(Ref) -> Res),
+        ("unsparse", unsparse as fn(Ref) -> Res),
+        ("bake", bake as fn(Ref) -> Res),
+        ("bake-some", bake_some as fn(Ref) -> Res),
+        ("reduce", reduce as fn(Ref) -> Res),
+        ("split", split as fn(Ref) -> Res),
+        ("read-file", read_file as fn(Ref) -> Res),
     ].iter().map(|(name, f)| (Val::from(*name), Val::Fn(wrapf(f)))));
     res
 }

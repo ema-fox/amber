@@ -5,7 +5,7 @@ use im::{HashMap, Vector};
 use crate::sparsevec::SparseVec;
 
 #[derive(Clone)]
-pub struct AFn(pub Rc<dyn Fn (Val) -> Res>);
+pub struct AFn(pub Rc<dyn Fn (Ref) -> Res>);
 
 impl std::fmt::Debug for AFn {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
