@@ -11,7 +11,7 @@ use crate::val::{Val, Ref, Res, AFn, refe, ok};
 use crate::create;
 
 // TODO reconsider where to define these types
-pub type Env = im::HashMap<Val, Val>;
+pub type Env = im::HashMap<Ref, Ref>;
 
 pub fn call(x: &Val, args: Ref) -> Res {
     match x {
@@ -385,7 +385,7 @@ pub fn get() -> Env {
         ("placeholder-fn", placeholder_fn as fn(Vec<Val>) -> Res),
         ("gensym", gensym2 as fn(Vec<Val>) -> Res),
         ("op-dot", op_dot as fn(Vec<Val>) -> Res),
-    ].iter().map(|(name, f)| ((*name).into(), Val::Fn(wrap_list_arg(f)))).collect();
+    ].iter().map(|(name, f)| (refe(*name), refe(Val::Fn(wrap_list_arg(f))))).collect();
     res.extend([
         ("op-op", op_op as fn(Ref) -> Res),
         ("op-call-coll", op_call_coll as fn(Ref) -> Res),
@@ -400,6 +400,6 @@ pub fn get() -> Env {
         ("reduce", reduce as fn(Ref) -> Res),
         ("split", split as fn(Ref) -> Res),
         ("read-file", read_file as fn(Ref) -> Res),
-    ].iter().map(|(name, f)| (Val::from(*name), Val::Fn(wrapf(f)))));
+    ].iter().map(|(name, f)| (refe(*name), refe(Val::Fn(wrapf(f))))));
     res
 }

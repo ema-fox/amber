@@ -32,7 +32,7 @@ impl std::hash::Hash for AFn {
 pub enum Val {
     Int(i64),
     Str(String),
-    Coll(SparseVec<Val>, HashMap<Val, Val>),
+    Coll(SparseVec<Val>, HashMap<Ref, Ref>),
     Fn(AFn)
 }
 
@@ -57,7 +57,7 @@ impl Val {
             Val::Coll(xs, d) => if let Val::Int(i) = k2 {
                 xs.get(i as usize)
             } else {
-                d.get(&k2)
+                d.get(&k2).map(|x| &**x)
             }
             _ => {
                 None
@@ -75,7 +75,7 @@ impl Val {
             if let Val::Int(i) = k2 {
                 todo!("{:?}{:?}", xs, i);
             } else {
-                d.insert(k2, v.into());
+                d.insert(Arc::new(k2), refe(v));
             }
         } else {
             panic!();
@@ -108,7 +108,7 @@ impl Val {
     pub fn values(&self) -> Vector<Val> {
         if let Val::Coll(xs, d) = self {
             let mut res: Vector<Val> = xs.unsparse().into_iter().cloned().collect();
-            res.extend(d.values().cloned());
+            res.extend(d.values().map(|x| (**x).clone()));
             res
         } else {
             panic!();
@@ -127,7 +127,7 @@ impl Val {
     pub fn retain(self, f: impl Fn(Val) -> bool) -> Self {
         if let Val::Coll(xs, d) = self {
             let mut dres = d.clone();
-            dres.retain(|k, _v| f(k.clone()));
+            dres.retain(|k, _v| f((**k).clone()));
             Val::Coll(xs.retain(|i| f(Val::from(i as i64))), dres)
         } else {
             panic!();
@@ -146,7 +146,7 @@ impl Val {
     pub fn bake<E>(&self, f: impl Fn(Val) -> Result<Val, E>) -> Result<Val, E> {
         if let Val::Coll(xs, d) = self {
             Ok(Val::Coll(xs.bake(|i| f(Val::from(i as i64)))?,
-                         HashMap::from(d.keys().map(|k| f(k.clone()).map(|x| (k.clone(), x)))
+                         HashMap::from(d.keys().map(|k| f((**k).clone()).map(|x| (k.clone(), Arc::new(x))))
                                        .collect::<Result<Vec<_>, _>>()?)))
         } else {
             panic!();
@@ -157,7 +157,7 @@ impl Val {
         // TODO reconsider name
         if let Val::Coll(xs, d) = self {
             Val::Coll(xs.bake_some(|i| f(Val::from(i as i64))),
-                      HashMap::from(d.keys().filter_map(|k| f(k.clone()).map(|x| (k.clone(), x)))
+                      HashMap::from(d.keys().filter_map(|k| f((**k).clone()).map(|x| (k.clone(), Arc::new(x))))
                       .collect::<Vec<_>>()))
         } else {
             panic!();
@@ -315,12 +315,12 @@ impl TryFrom<Val> for Vec<Val> {
     }
 }
 
-impl TryFrom<Val> for im::HashMap<Val, Val> {
+impl TryFrom<Val> for im::HashMap<Ref, Ref> {
     type Error = &'static str;
 
     fn try_from(v: Val) -> Result<Self, Self::Error> {
         if let Val::Coll(xs, mut d) = v {
-            d.extend(xs.entries().into_iter().map(|(i, v)| (Val::from(i), v)));
+            d.extend(xs.entries().into_iter().map(|(i, v)| (refe(i), refe(v))));
             Ok(d)
         } else {
             Err("Not a Val::Coll")
@@ -374,6 +374,13 @@ impl<T> From<Vec<T>> for Val where Val: From<T> {
 impl<K, V> From<HashMap<K, V>> for Val where Val: From<K> + From<V>, K: Clone, V: Clone {
     fn from(m: HashMap<K, V>) -> Self {
         // TODO put integer keys into sparseVec
-        Val::Coll(SparseVec::new(), m.iter().map(|(k, v)| (Self::from(k.clone()), Val::from(v.clone()))).collect())
+        Val::Coll(SparseVec::new(), m.iter().map(|(k, v)| (refe(k.clone()), refe(v.clone()))).collect())
+    }
+}
+
+impl From<HashMap<Ref, Ref>> for Val {
+    fn from(m: HashMap<Ref, Ref>) -> Self {
+        // TODO put integer keys into sparseVec
+        Val::Coll(SparseVec::new(), m)
     }
 }

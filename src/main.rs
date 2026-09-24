@@ -11,7 +11,7 @@ use panic_context::panic_context;
 mod sparsevec;
 
 mod val;
-use val::{Val, Ref, Res, AFn, ok};
+use val::{Val, Ref, Res, AFn, refe, ok};
 
 mod create;
 mod parse;
@@ -37,7 +37,7 @@ enum Inst {
 fn macro_expand1(form: Val, env: &Env) -> Val {
     if let Some(op) = form.get("op") {
         let op_str: String = format!("op-{}", String::try_from(op).unwrap());
-        if let Some(mac) = env.get(&op_str.into()) {
+        if let Some(mac) = env.get(&refe(op_str)) {
            (*call(&mac, Arc::new(form.get("args").unwrap().clone())).unwrap()).clone()
         } else {form}
     } else {form}
@@ -59,7 +59,7 @@ fn macro_expand(form: Val, env: &Env) -> Val {
             let mut form2 = form.clone();
             form2.insert("args", Val::from(args2));
             form2
-        } else if let Some(mac) = env.get(&op_str.into()) {
+        } else if let Some(mac) = env.get(&refe(op_str)) {
             macro_expand((*call(&mac, Arc::new(form.get("args").unwrap().clone())).unwrap()).clone(), env)
         } else {
             if let Some(args) = form.get("args").map(|v| Vec::try_from(v.clone()).unwrap()) {
@@ -76,7 +76,7 @@ fn dest_macro_expand(dest: Val, env: &Env) -> (Val, Vec<Val>) {
     let dest_op_str = format!("bind-op-{}", String::try_from(dest.get("op").unwrap()).unwrap());
     if dest_op_str == "bind-op-deref" {
         (dest.get("name").unwrap().clone(), vec![])
-    } else if let Some(mac) = env.get(&dest_op_str.clone().into()) {
+    } else if let Some(mac) = env.get(&refe(dest_op_str.clone())) {
         let foo = call(&mac, Arc::new(dest.get("args").unwrap().clone())).unwrap();
         (foo.get("bind").unwrap().clone(),
          Vec::try_from(foo.get("ops").unwrap().clone()).unwrap()
@@ -181,7 +181,7 @@ fn val_to_inst(y: &Val) -> Inst {
 fn eval_body(insts: &Vec<Inst>, env: &mut Env) {
     for inst in insts {
         if let Inst::Bind(binding_name, inner_inst) = inst {
-            env.insert((*eval(&binding_name, &env).unwrap()).clone(), (*eval(&inner_inst, &env).unwrap()).clone());
+            env.insert(eval(&binding_name, &env).unwrap(), eval(&inner_inst, &env).unwrap());
         } else {
             eval(&inst, &env).unwrap();
         }
@@ -201,8 +201,8 @@ fn eval_vals(vinsts: &Vec<Val>, env: &Env) -> Env {
         for vinst2 in bind_macro_expand(macro_expand(vinst.clone(), &env2), &env2) {
             let inst = val_to_inst(&vinst2);
             if let Inst::Bind(binding_name, inner_inst) = inst {
-                let name = (*eval(&binding_name, &env2).unwrap()).clone();
-                let result = (*eval(&inner_inst, &env2).unwrap()).clone();
+                let name = eval(&binding_name, &env2).unwrap();
+                let result = eval(&inner_inst, &env2).unwrap();
                 env2.insert(name.clone(), result.clone());
                 result_env.insert(name, result);
             } else {
@@ -251,7 +251,7 @@ fn quasiquote(form: &Val, env: &Env) -> Val {
                         (i, quasiquote(&x, env))
                     }).collect()),
                     d.iter().map(|(k, v)| {
-                        (quasiquote(k, env), quasiquote(v, env))
+                        (Arc::new(quasiquote(k, env)), Arc::new(quasiquote(v, env)))
                     }).collect()
                 )
             },
@@ -263,7 +263,7 @@ fn quasiquote(form: &Val, env: &Env) -> Val {
 fn eval(inst: &Inst, env: &Env) -> Res {
     match inst {
         Inst::Lit(x) => ok(x.clone()),
-        Inst::Deref(x) => env.get(&x.clone().into()).cloned().map(Arc::new).ok_or_else(|| Arc::new(format!("no {} in env", x).into())),
+        Inst::Deref(x) => env.get(&refe(x.clone())).cloned().ok_or_else(|| Arc::new(format!("no {} in env", x).into())),
         Inst::List(xs) => ok(xs.iter().map(|x| (*eval(x, env).unwrap()).clone()).collect::<Vec<_>>()),
         Inst::Dict(xs) => ok(eval_dict(xs, env)),
         Inst::Call(finst, arginst) => {
@@ -293,7 +293,7 @@ fn eval(inst: &Inst, env: &Env) -> Res {
             let par_name = par_name.clone();
             ok(Val::Fn(AFn(Rc::new(move |arg: Ref| {
                 let mut env2 = env.clone();
-                env2.insert(par_name.clone().into(), (*arg).clone());
+                env2.insert(refe(par_name.clone()), arg);
                 eval_body(&body, &mut env2);
                 eval(&tail, &env2)
             }))))
