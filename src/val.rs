@@ -215,20 +215,24 @@ impl Val {
                         elements.append(&mut vp);
                     }
                 }
-                let (open, close) = if xs.count() > 0 {
-                    ('[', ']')
+                if elements.len() == 0 {
+                    vec!["[]".to_string()]
                 } else {
-                    ('{', '}')
-                };
-                elements.get_mut(0).unwrap().insert(0, open);
-                elements.last_mut().unwrap().push(close);
-                let mut iter = elements.into_iter();
-                elements = vec![iter.next().unwrap()];
-                elements.extend(iter.map(|mut s| {s.insert(0, ' '); s}));
-                if elements.iter().map(String::len).sum::<usize>() < 40 {
-                    vec![elements.join("")]
-                } else {
-                    elements
+                    let (open, close) = if xs.count() > 0 {
+                        ('[', ']')
+                    } else {
+                        ('{', '}')
+                    };
+                    elements.get_mut(0).unwrap().insert(0, open);
+                    elements.last_mut().unwrap().push(close);
+                    let mut iter = elements.into_iter();
+                    elements = vec![iter.next().unwrap()];
+                    elements.extend(iter.map(|mut s| {s.insert(0, ' '); s}));
+                    if elements.iter().map(String::len).sum::<usize>() < 40 {
+                        vec![elements.join("")]
+                    } else {
+                        elements
+                    }
                 }
             }
             _ => vec![self.repr()]
