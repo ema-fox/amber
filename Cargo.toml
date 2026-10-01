@@ -3,6 +3,14 @@ name = "amber"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "libamber"
+path = "src/lib.rs"
+
+[[bin]]
+name = "amber"
+path = "src/main.rs"
+
 [dependencies]
 nom = "8.0"
 im = "15.1"
