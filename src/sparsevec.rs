@@ -272,6 +272,12 @@ impl<T> From<Vec<T>> for SparseVec<T> {
     }
 }
 
+impl<T> From<Vec<Arc<T>>> for SparseVec<T> {
+    fn from(xs: Vec<Arc<T>>) -> Self {
+        Self::from_entries_arc(xs.into_iter().enumerate().collect())
+    }
+}
+
 impl<T: Clone> TryFrom<SparseVec<T>> for Vec<T> {
     type Error = &'static str;
 

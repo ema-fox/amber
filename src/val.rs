@@ -124,11 +124,11 @@ impl Val {
         }
     }
 
-    pub fn retain(self, f: impl Fn(Val) -> bool) -> Self {
+    pub fn retain(self, f: impl Fn(Ref) -> bool) -> Self {
         if let Val::Coll(xs, d) = self {
             let mut dres = d.clone();
-            dres.retain(|k, _v| f((**k).clone()));
-            Val::Coll(xs.retain(|i| f(Val::from(i as i64))), dres)
+            dres.retain(|k, _v| f(k.clone()));
+            Val::Coll(xs.retain(|i| f(refe(i as i64))), dres)
         } else {
             panic!();
         }
@@ -367,6 +367,12 @@ impl From<String> for Val {
 impl From<&str> for Val {
     fn from(s: &str) -> Self {
         s.to_string().into()
+    }
+}
+
+impl From<Vec<Ref>> for Val  {
+    fn from(xs: Vec<Ref>) -> Self {
+        Val::Coll(xs.into(), HashMap::new())
     }
 }
 
