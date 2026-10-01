@@ -160,7 +160,8 @@ impl Val {
                       HashMap::from(d.keys().filter_map(|k| f((**k).clone()).map(|x| (k.clone(), Arc::new(x))))
                       .collect::<Vec<_>>()))
         } else {
-            panic!();
+            // TODO print self with something like repr_limited()
+            panic!("Not a Coll");
         }
     }
 
