@@ -434,3 +434,16 @@ impl<T: Clone> TryFrom<SparseVec<T>> for Vec<T> {
         Ok(xs.unsparse().into_iter().cloned().collect())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_entries_i() {
+        let ys = vec![3, 4, 5, 1, 3];
+        let xs: SparseVec<isize> = ys.clone().into();
+        assert_eq!(xs.entries_i().map(|(a, b)| (a, *b)).collect::<Vec<_>>(),
+                   ys.into_iter().enumerate().collect::<Vec<_>>());
+    }
+}
