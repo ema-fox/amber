@@ -7,7 +7,7 @@ use im::hashmap;
 
 use panic_context::panic_context;
 
-mod sparsevec;
+pub mod sparsevec;
 
 pub mod val;
 use val::{Val, Ref, Res, AFn, refe, ok};
