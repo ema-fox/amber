@@ -331,6 +331,17 @@ impl<T> SparseVec<T> {
         self.root = Arc::new(Branch(branch));
 
         self.level += 1;
+
+        /*
+        let oldroot = std::mem::replace(&mut self.root,  Arc::new(Branch([const {None}; BRANCH])));
+        match Arc::make_mut(&mut self.root) {
+            &mut Branch(ref mut xs) => {
+                xs[0] = Some(oldroot);
+                self.level += 1;
+            },
+            _ => unreachable!()
+        }
+        */
     }
 
     pub fn merge(&mut self, mut other: Self) {
